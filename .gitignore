@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# build artifacts
+dist/
+coverage/
+
+# turbo
+.turbo/
+
+# typescript
+*.tsbuildinfo
+
+# env（保留示例；密钥不入库，SEC-KEY-02）
+.env
+.env.*
+!.env.example
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/

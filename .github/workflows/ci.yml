@@ -33,3 +33,18 @@ jobs:
       # test 内含枚举快照测试（shared-types）——改枚举必须显式改快照。
       - name: Lint / typecheck / test
         run: pnpm exec turbo run lint typecheck test
+
+  # SEC-KEY-03【强制】凭据扫描门禁：与 quality 同为合并必需检查。
+  secrets-scan:
+    name: gitleaks 凭据扫描（SEC-KEY-03）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout（全历史，供 gitleaks 扫描）
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: gitleaks detect
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

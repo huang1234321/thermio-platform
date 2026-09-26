@@ -9,6 +9,7 @@
 #       角色策略按 current_user 生效，等价于真实登录连接。
 # 连接：PG* 环境变量（默认 PGUSER=postgres / PGDATABASE=thermio，容器 socket trust 通道即可）。
 # 退出：全部通过 exit 0；任一失败 exit 1（FAIL 汇总在末尾）。
+#   DAT-107：末次清理退出码计入 FAIL；INT/TERM/HUP trap 兜底清夹具后以 128+信号值退出。
 set -uo pipefail
 
 PGDATABASE="${PGDATABASE:-thermio}"
@@ -49,12 +50,32 @@ expect_error() {
   fi
 }
 
-# ── 夹具：双租户 + 租户 A 一栋楼（superuser 通道；先清后建保证可重跑） ──
-psql_exec <<'SQL'
+# ── 夹具清理（先清后建保证可重跑；逆依赖序，RESTRICT 纪律） ──
+cleanup_fixture() {
+  psql_exec <<'SQL'
 \set ON_ERROR_STOP on
 BEGIN;
 DELETE FROM building WHERE tenant_id IN (SELECT id FROM tenant WHERE slug IN ('_rls_verify_a','_rls_verify_b'));
 DELETE FROM tenant WHERE slug IN ('_rls_verify_a','_rls_verify_b');
+COMMIT;
+SQL
+}
+
+# ── trap 兜底：中断信号先清夹具再退（正常退出路径不受影响；清理幂等可重入） ──
+on_interrupt() {
+  cleanup_fixture || echo "WARN: 中断兜底清理失败，夹具残留可重跑自愈" >&2
+  exit $((128 + $1))
+}
+trap 'on_interrupt 2' INT   # 130
+trap 'on_interrupt 15' TERM # 143
+trap 'on_interrupt 1' HUP   # 129
+
+cleanup_fixture
+
+# ── 夹具：双租户 + 租户 A 一栋楼（superuser 通道） ──
+psql_exec <<'SQL'
+\set ON_ERROR_STOP on
+BEGIN;
 INSERT INTO tenant (name, slug) VALUES ('RLS验证A', '_rls_verify_a'), ('RLS验证B', '_rls_verify_b');
 INSERT INTO building (tenant_id, name)
   SELECT id, 'A楼' FROM tenant WHERE slug = '_rls_verify_a';
@@ -97,14 +118,11 @@ echo "== 用例 6：owner（FORCE RLS 无策略）零可见 =="
 expect_count "owner 业务表零可见" 0 \
   "SET ROLE thermio_owner; SELECT count(*) FROM building;"
 
-# ── 清理夹具（逆依赖序，RESTRICT 纪律） ──
-psql_exec <<'SQL'
-\set ON_ERROR_STOP on
-BEGIN;
-DELETE FROM building WHERE tenant_id IN (SELECT id FROM tenant WHERE slug IN ('_rls_verify_a','_rls_verify_b'));
-DELETE FROM tenant WHERE slug IN ('_rls_verify_a','_rls_verify_b');
-COMMIT;
-SQL
+# ── 清理夹具（逆依赖序，RESTRICT 纪律）；末次清理退出码检查（DAT-107） ──
+if ! cleanup_fixture; then
+  echo "FAIL: 末次夹具清理非零退出（连接闪断/SQL 失败），残留由下次先清后建自愈"
+  FAIL=$((FAIL + 1))
+fi
 
 echo "== 结果：PASS=${PASS} FAIL=${FAIL} =="
 [ "$FAIL" -eq 0 ]

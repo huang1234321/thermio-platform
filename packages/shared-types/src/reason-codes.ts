@@ -4,9 +4,9 @@
  * 治理规则：
  * - 命名 `<domain>.<cause>`，全 snake_case 小写（§8 对齐事项 1 的收口结论：
  *   modules/overview §2 的大写蛇形码为设计期语义清单，落码一律采用本表小写风格）；
- * - 首版种子 17 码取值严格来自 platform.md §5.2；随模块落码注册的增量码在
- *   REASON_CODES 数组注释中逐批留痕（新增走 PR，改义视为破坏性变更，
- *   API-CT-02/05 同构承诺）；
+ * - 首版种子 18 码取值严格来自 platform.md §5.2（common.not_found 随 DAT-96
+ *   收尾增补入 §5.2，DAT-119）；随模块落码注册的增量码在 REASON_CODES 数组
+ *   注释中逐批留痕（新增走 PR，改义视为破坏性变更，API-CT-02/05 同构承诺）；
  * - 闸门码与指标 label 同源：`proposal.gate_*` 的 cause 子串同时是
  *   `thermio_gate_rejections_total{gate=…}` 的 label 取值（ADR-017，一次定义两处消费）。
  */
@@ -36,7 +36,7 @@ export const PROPOSAL_GATE_REASON_CODES = [
 export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number];
 
 /**
- * 首版种子表全集（platform.md §5.2 表格 17 码 + 随模块落码注册的草案码）。
+ * 首版种子表全集（platform.md §5.2 表格 18 码 + 随模块落码注册的草案码）。
  * 改这张表 = 发版动作：同步 reason-codes.snapshot.test.ts 快照，评审可见。
  *
  * 首批注册（IMPL-12 / DAT-115，遥测查询服务落码，§5.2 治理走本 PR）：
@@ -47,6 +47,10 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * auth.service_unauthorized——OVERVIEW_DESIGN_CODE_ALIASES 的 SERVICE_UNAUTHORIZED
  * 草案映射自此指向种子码。
  *
+ * §5.2 增补（DAT-119 / DAT-96 收尾）：common.not_found——路由级 404 信封码，
+ * 骨架期在 api 异常过滤器以本地常量占位（刻意不入表保持 17 码对齐），本批转正，
+ * 种子表 17 → 18 码。
+ *
  * 三批注册（IMPL-10 / DAT-113，认证会话与 RBAC，modules M7 + platform.md §12 限速骨架）：
  * - common.rate_limited：§12「命中限速 429」落码（登录防爆破，SEC-PW-04）；
  * - auth.unauthenticated / auth.refresh_revoked：M7 草案（UNAUTHENTICATED / REFRESH_REVOKED）；
@@ -56,6 +60,7 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
 export const REASON_CODES = [
   'common.validation_failed',
   'common.internal_error',
+  'common.not_found',
   'common.rate_limited',
   'auth.invalid_credentials',
   'auth.token_expired',
@@ -109,10 +114,16 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 500,
     description: '未知异常兜底（只此一个 5xx 文案出口）',
   },
+  'common.not_found': {
+    domain: 'common',
+    http: 404,
+    description:
+      '路由级 404：无匹配路由的信封兜底（资源级不存在走各域 not_found 码，如 asset.not_found；SEC-AZ-03 不泄露存在性）',
+  },
   'common.rate_limited': {
     domain: 'common',
     http: 429,
-    description: '命中限速（platform.md §12 骨架码；登录防爆破 SEC-PW-04）',
+    description: '命中限速（platform.md §12 骨架码；登录防爆破，SEC-PW-04）',
   },
   'auth.invalid_credentials': {
     domain: 'auth',

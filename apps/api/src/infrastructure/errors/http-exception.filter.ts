@@ -9,15 +9,14 @@
  * 3. 框架 HttpException —— 无显式 reason_code 的框架错误按状态归一：
  *    400/422 → common.validation_failed（畸形请求体即校验失败）；
  *    401 → auth.invalid_credentials；403 → auth.forbidden；
- *    404 → ROUTE_NOT_FOUND（见下）；5xx → common.internal_error（唯一 5xx 文案出口）；
+ *    404 → common.not_found（路由级 404 信封码）；5xx → common.internal_error（唯一 5xx 文案出口）；
  *    其余未映射 4xx → common.validation_failed + 原状态保留 + WARN 日志（骨架期可见）；
  * 4. 未知异常 —— common.internal_error 500：响应不泄露堆栈/SQL/内部路径（API-ERR-04），
  *    堆栈只进 ERROR 日志（CODE-LOG-02/04）。
  *
- * ROUTE_NOT_FOUND_REASON_CODE = 'common.not_found'：未知路由的 404 信封码。这是
- * platform.md §5.2 的**已知缺口**（种子表只有资产域 asset.not_found，无路由级 404 码；
- * §5.1 又要求一切错误出口带 reason_code）——骨架期先以常量落地并在 DAT-96 PR 中 flag，
- * 待 §5.2 增补后挪入 shared-types 种子表；刻意不入种子表以保持「17 码严格对齐 §5.2」。
+ * common.not_found 已随 DAT-119 / DAT-96 收尾增补进 shared-types 种子表（§5.2，
+ * 17 → 18 码）：本过滤器不再持有本地占位常量，404 归一直接引用种子码，
+ * 取值正确性由 ReasonCode 类型在编译期钉死。
  */
 import {
   type ArgumentsHost,
@@ -37,17 +36,12 @@ import { zodFieldIssues } from '../validation/zod-validation.pipe.js';
 import { buildEnvelope } from './envelope.js';
 import { ReasonCodeException } from './reason-code.exception.js';
 
-export const ROUTE_NOT_FOUND_REASON_CODE = 'common.not_found';
-
-/** 种子码或路由级 404 占位码（§5.2 缺口，见文件头）。 */
-type EnvelopeReasonCode = ReasonCode | typeof ROUTE_NOT_FOUND_REASON_CODE;
-
 /** 框架错误的状态码归一表（仅收录语义无歧义的条目；数值键与 HttpStatus 对齐）。 */
-const FRAMEWORK_STATUS_TO_REASON_CODE: Readonly<Record<number, EnvelopeReasonCode>> = {
+const FRAMEWORK_STATUS_TO_REASON_CODE: Readonly<Record<number, ReasonCode>> = {
   400: 'common.validation_failed',
   401: 'auth.invalid_credentials',
   403: 'auth.forbidden',
-  404: ROUTE_NOT_FOUND_REASON_CODE,
+  404: 'common.not_found',
   422: 'common.validation_failed',
   500: 'common.internal_error',
 };

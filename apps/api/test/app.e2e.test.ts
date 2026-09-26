@@ -23,7 +23,6 @@ import {
 } from '@thermio/shared-types';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/bootstrap.js';
-import { ROUTE_NOT_FOUND_REASON_CODE } from '../src/infrastructure/errors/http-exception.filter.js';
 import {
   GateClampedResult,
   ReasonCodeException,
@@ -240,7 +239,7 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
       const res = await request(app.getHttpServer())
         .get('/api/v1/definitely-not-a-route')
         .expect(404);
-      expect(res.body.error.reason_code).toBe(ROUTE_NOT_FOUND_REASON_CODE);
+      expect(res.body.error.reason_code).toBe('common.not_found');
       expect(res.body.error.request_id).toMatch(/^req_/);
     });
   });
@@ -328,7 +327,8 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
   describe('畸形响应客户端兜底（§5.4 / API-ERR-02，契约闭环）', () => {
     it('shouldDriveClientFallbacks_whenParsingOurOwnResponsesWithSharedTypes', async () => {
       // 用与 api-client 同源的 parseApiError 消费本服务真实响应：
-      // 已知码 known=true；未知路由码不在种子表 → known=false 走通用兜底（API-ERR-02）。
+      // 种子码 known=true（路由级 404 的 common.not_found 已随 DAT-119 入种子表，
+      // 同为 known=true）；known=false 分支由清单外码触发（API-ERR-02 通用兜底）。
       const known = await request(app.getHttpServer())
         .get('/api/v1/probe/gate-rate-limited')
         .expect(429);
@@ -336,9 +336,14 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
       expect(parsedKnown.known).toBe(true);
 
       const routeNotFound = await request(app.getHttpServer()).get('/api/v1/nope').expect(404);
-      const parsedUnknown = parseApiError(routeNotFound.body);
-      expect(parsedUnknown.known).toBe(false);
-      expect(parsedUnknown.reason_code).toBe(ROUTE_NOT_FOUND_REASON_CODE);
+      const parsedRouteNotFound = parseApiError(routeNotFound.body);
+      expect(parsedRouteNotFound.known).toBe(true);
+      expect(parsedRouteNotFound.reason_code).toBe('common.not_found');
+
+      const parsedForeign = parseApiError({
+        error: { reason_code: 'common.not_a_seed_code', message: 'x', request_id: 'req_x' },
+      });
+      expect(parsedForeign.known).toBe(false);
     });
   });
 });

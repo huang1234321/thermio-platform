@@ -46,6 +46,9 @@ describe('reason_code registry snapshot', () => {
         "common.internal_error": {
           "http": 500,
         },
+        "common.not_found": {
+          "http": 404,
+        },
         "common.rate_limited": {
           "http": 429,
         },

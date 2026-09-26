@@ -40,6 +40,9 @@ describe('reason_code registry snapshot', () => {
         "common.internal_error": {
           "http": 500,
         },
+        "common.not_found": {
+          "http": 404,
+        },
         "common.validation_failed": {
           "http": 422,
         },

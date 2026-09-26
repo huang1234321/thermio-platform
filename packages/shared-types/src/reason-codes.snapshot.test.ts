@@ -46,6 +46,9 @@ describe('reason_code registry snapshot', () => {
         "mv.period_invalid": {
           "http": 422,
         },
+        "point.no_data": {
+          "http": 404,
+        },
         "point.not_controllable": {
           "http": 409,
         },
@@ -71,6 +74,12 @@ describe('reason_code registry snapshot', () => {
         "proposal.gate_rate_limited": {
           "gate": "gate_rate_limited",
           "http": 429,
+        },
+        "telemetry.range_invalid": {
+          "http": 422,
+        },
+        "telemetry.store_unavailable": {
+          "http": 503,
         },
       }
     `);

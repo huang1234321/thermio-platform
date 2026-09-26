@@ -4,8 +4,9 @@
  * 治理规则：
  * - 命名 `<domain>.<cause>`，全 snake_case 小写（§8 对齐事项 1 的收口结论：
  *   modules/overview §2 的大写蛇形码为设计期语义清单，落码一律采用本表小写风格）；
- * - 本表是首版种子（17 码），取值严格来自 platform.md §5.2，不自造；
- *   新增走 PR，改义视为破坏性变更（API-CT-02/05 同构承诺）；
+ * - 首版种子 17 码取值严格来自 platform.md §5.2；随模块落码注册的增量码在
+ *   REASON_CODES 数组注释中逐批留痕（新增走 PR，改义视为破坏性变更，
+ *   API-CT-02/05 同构承诺）；
  * - 闸门码与指标 label 同源：`proposal.gate_*` 的 cause 子串同时是
  *   `thermio_gate_rejections_total{gate=…}` 的 label 取值（ADR-017，一次定义两处消费）。
  */
@@ -35,8 +36,12 @@ export const PROPOSAL_GATE_REASON_CODES = [
 export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number];
 
 /**
- * 首版种子表全集（platform.md §5.2 表格逐行对应，17 码）。
+ * 首版种子表全集（platform.md §5.2 表格 17 码 + 随模块落码注册的草案码）。
  * 改这张表 = 发版动作：同步 reason-codes.snapshot.test.ts 快照，评审可见。
+ *
+ * 首批注册（IMPL-12 / DAT-115，遥测查询服务落码，§5.2 治理走本 PR）：
+ * point.no_data / telemetry.range_invalid / telemetry.store_unavailable——
+ * 目标码与 OVERVIEW_DESIGN_CODE_ALIASES 映射（IMPL-2 预留）逐字一致。
  */
 export const REASON_CODES = [
   'common.validation_failed',
@@ -52,6 +57,9 @@ export const REASON_CODES = [
   'mv.baseline_not_active',
   'mv.period_invalid',
   'alarm.rule_not_found',
+  'point.no_data',
+  'telemetry.range_invalid',
+  'telemetry.store_unavailable',
 ] as const;
 
 export const ReasonCodeSchema = z.enum(REASON_CODES);
@@ -162,6 +170,23 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'alarm',
     http: 404,
     description: '告警规则不存在',
+  },
+  'point.no_data': {
+    domain: 'point',
+    http: 404,
+    description: '点位已登记但尚无遥测数据（IMPL-12 latest 空态；区别于 asset.not_found 的未登记）',
+  },
+  'telemetry.range_invalid': {
+    domain: 'telemetry',
+    http: 422,
+    description:
+      '遥测查询跨度超限或 from/to 时间参数无效（跨度上限按 interval 分档，shared-types TELEMETRY_SPAN_LIMIT_DAYS）',
+  },
+  'telemetry.store_unavailable': {
+    domain: 'telemetry',
+    http: 503,
+    description:
+      '遥测查询所需存储不可用或未配置（TSDB 只读连接 / PG 点位档案；dev 无栈时显式降级口径，ADR-005 read replica 配置位）',
   },
 };
 

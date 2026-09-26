@@ -22,8 +22,10 @@ describe('reason_code registry', () => {
     }
   });
 
-  it('shouldRegisterExactlySeventeenSeedCodes_perPlatformMdS52', () => {
-    expect(REASON_CODES).toHaveLength(17);
+  it('shouldRegisterExactlyTwentyCodes_seventeenSeedsPlusImpl12Additions', () => {
+    // §5.2 首版 17 码 + IMPL-12 注册的 point.no_data / telemetry.range_invalid /
+    // telemetry.store_unavailable（DAT-115 PR 治理动作，数组注释留痕）。
+    expect(REASON_CODES).toHaveLength(20);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

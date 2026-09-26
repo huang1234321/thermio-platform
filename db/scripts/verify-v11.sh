@@ -9,9 +9,9 @@
 #   用例 6：RLS 隔离（B 上下文零可见 / B 写 A 被拒 / 未设上下文 fail-closed）
 #   用例 7：角色最小权（thermio_ingest 读 import_job 拒、读 gateway 正常——无回归）
 #   用例 8：0002 索引 alarm_event_tenant_id_uidx indisvalid + indisunique
-#   用例 9：fdd_report 同期唯一（同期拒、相邻期过）+ import_row touch 触发器
+#   用例 9：fdd_report 同期唯一（同期拒、相邻期过）+ import_row / control_fuse touch 触发器
 #   用例 1（全链 Up 25 表）与用例 10（Down 往返）由 CI 的 goose 步骤覆盖，不在本脚本。
-# 前置：目标库已完成 bootstrap + goose up（0001–0003）；本脚本经 superuser 连接
+# 前置：目标库已完成 bootstrap + goose up（0001–0004）；本脚本经 superuser 连接
 #       （SET ROLE 切换被测角色），角色策略按 current_user 生效，等价于真实登录连接。
 # 连接：PG* 环境变量（默认 PGUSER=postgres / PGDATABASE=thermio，容器 socket trust 通道即可）。
 # 退出：全部通过 exit 0；任一失败 exit 1（FAIL 汇总在末尾）。
@@ -236,6 +236,12 @@ psql_exec -c "UPDATE import_row SET updated_at = now() - interval '1 hour' WHERE
   || { echo "FAIL: updated_at 拨回失败"; FAIL=$((FAIL + 1)); }
 expect_count "import_row touch 触发器推进 updated_at" 1 \
   "SET ROLE thermio_api; BEGIN; SET LOCAL app.tenant_id = '${TENANT_A}'; WITH upd AS (UPDATE import_row SET raw_description = 'V11复核' WHERE tenant_id = '${TENANT_A}'::uuid RETURNING updated_at) SELECT count(*) FROM upd WHERE updated_at > now() - interval '1 minute'; ROLLBACK;"
+# control_fuse touch（0004，DAT-102）：同款拨回验证——api 角色只 UPDATE 语义列（模拟
+# 评估任务/人工解除路径不带 updated_at），触发器应把行维护时间戳推回当前时刻
+psql_exec -c "UPDATE control_fuse SET updated_at = now() - interval '1 hour' WHERE tenant_id = '${TENANT_A}'::uuid" \
+  || { echo "FAIL: control_fuse updated_at 拨回失败"; FAIL=$((FAIL + 1)); }
+expect_count "control_fuse touch 触发器推进 updated_at（0004）" 1 \
+  "SET ROLE thermio_api; BEGIN; SET LOCAL app.tenant_id = '${TENANT_A}'; WITH upd AS (UPDATE control_fuse SET trigger_detail = '{\"window\":\"15m\",\"recheck\":true}'::jsonb WHERE tenant_id = '${TENANT_A}'::uuid RETURNING updated_at) SELECT count(*) FROM upd WHERE updated_at > now() - interval '1 minute'; ROLLBACK;"
 
 # ── 清理夹具（逆依赖序，RESTRICT 纪律）；末次清理退出码检查（DAT-107） ──
 if ! cleanup_fixture; then

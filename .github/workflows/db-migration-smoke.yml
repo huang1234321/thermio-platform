@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 15
     env:
       PG_CONTAINER: thermio-smoke-pg
-      PG_PORT: "55432"
+      PG_PORT: '55432'
       GOOSE_VERSION: v3.24.3
     steps:
       - name: Checkout
@@ -55,7 +55,7 @@ jobs:
         run: go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
 
       # 迁移执行角色 thermio_owner（NOLOGIN）：连接参数 SET ROLE（ddl.md §1/§5.1）
-      - name: goose up（25 表建立，0001–0003）
+      - name: goose up（25 表建立，0001–0004）
         run: |
           "$(go env GOPATH)/bin/goose" -dir db/migrations/pg postgres \
             "postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up

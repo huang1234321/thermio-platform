@@ -1,0 +1,265 @@
+/**
+ * reason_code 种子表与命名规则（platform.md §5.2，IMPL-2 / DAT-96 落地）。
+ *
+ * 治理规则：
+ * - 命名 `<domain>.<cause>`，全 snake_case 小写（§8 对齐事项 1 的收口结论：
+ *   modules/overview §2 的大写蛇形码为设计期语义清单，落码一律采用本表小写风格）；
+ * - 本表是首版种子（17 码），取值严格来自 platform.md §5.2，不自造；
+ *   新增走 PR，改义视为破坏性变更（API-CT-02/05 同构承诺）；
+ * - 闸门码与指标 label 同源：`proposal.gate_*` 的 cause 子串同时是
+ *   `thermio_gate_rejections_total{gate=…}` 的 label 取值（ADR-017，一次定义两处消费）。
+ */
+import { z } from 'zod';
+
+/** 五道闸门的 cause 子串（ADR-009；§5.2「与 ADR-017 的咬合」）。 */
+export const GATE_CAUSES = [
+  'gate_not_whitelisted',
+  'gate_clamped',
+  'gate_rate_limited',
+  'gate_conflict',
+  'gate_circuit_open',
+] as const;
+export type GateCause = (typeof GATE_CAUSES)[number];
+
+/**
+ * 闸门 reason_code（`proposal.<cause>`）。与 GATE_CAUSES 的同源性不由类型推导
+ * （map 会丢字面量元组），由 reason-codes.test.ts 钉死：改一处必须同步另一处。
+ */
+export const PROPOSAL_GATE_REASON_CODES = [
+  'proposal.gate_not_whitelisted',
+  'proposal.gate_clamped',
+  'proposal.gate_rate_limited',
+  'proposal.gate_conflict',
+  'proposal.gate_circuit_open',
+] as const;
+export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number];
+
+/**
+ * 首版种子表全集（platform.md §5.2 表格逐行对应，17 码）。
+ * 改这张表 = 发版动作：同步 reason-codes.snapshot.test.ts 快照，评审可见。
+ */
+export const REASON_CODES = [
+  'common.validation_failed',
+  'common.internal_error',
+  'auth.invalid_credentials',
+  'auth.token_expired',
+  'auth.forbidden',
+  'asset.not_found',
+  'asset.duplicate_raw_name',
+  'point.not_controllable',
+  'point.write_not_numeric',
+  ...PROPOSAL_GATE_REASON_CODES,
+  'mv.baseline_not_active',
+  'mv.period_invalid',
+  'alarm.rule_not_found',
+] as const;
+
+export const ReasonCodeSchema = z.enum(REASON_CODES);
+export type ReasonCode = (typeof REASON_CODES)[number];
+
+/** reason_code 元数据：domain / HTTP 状态 / 闸门联动 / 语义（§5.2 表格第 2–4 列）。 */
+export interface ReasonCodeMeta {
+  readonly domain: string;
+  readonly http: number;
+  /** 闸门码：cause 子串同时是 thermio_gate_rejections_total{gate} 的 label 值。 */
+  readonly gate?: GateCause;
+  readonly description: string;
+}
+
+/**
+ * §5.2 种子注册表：code → 元数据。
+ * 注意 `proposal.gate_clamped` 的 http=200——仲裁通过后的执行路径被值域夹紧，
+ * 提案本身接受，2xx + reason_code 表达「成功但被修正」，不违反 API-ERR-03（非错误）。
+ */
+export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> = {
+  'common.validation_failed': {
+    domain: 'common',
+    http: 422,
+    description: '请求体/参数 schema 校验失败（details 带字段级错误）',
+  },
+  'common.internal_error': {
+    domain: 'common',
+    http: 500,
+    description: '未知异常兜底（只此一个 5xx 文案出口）',
+  },
+  'auth.invalid_credentials': {
+    domain: 'auth',
+    http: 401,
+    description: '登录凭证无效（登录与鉴权）',
+  },
+  'auth.token_expired': {
+    domain: 'auth',
+    http: 401,
+    description: '会话过期（可刷新）',
+  },
+  'auth.forbidden': {
+    domain: 'auth',
+    http: 403,
+    description: '已认证但权限不足',
+  },
+  'asset.not_found': {
+    domain: 'asset',
+    http: 404,
+    description:
+      '资产域资源不存在：building/system/equipment/point（越租户/越楼宇同 404，不泄露存在性 SEC-AZ-03）',
+  },
+  'asset.duplicate_raw_name': {
+    domain: 'asset',
+    http: 409,
+    description: '资产域原始名重复（唯一性冲突）',
+  },
+  'point.not_controllable': {
+    domain: 'point',
+    http: 409,
+    description: '写入前置校验失败：点位未登记可控（P2-3 可写点限数值量）',
+  },
+  'point.write_not_numeric': {
+    domain: 'point',
+    http: 422,
+    description: '写入值非数值（可写点限数值量）',
+  },
+  'proposal.gate_not_whitelisted': {
+    domain: 'proposal',
+    http: 409,
+    gate: 'gate_not_whitelisted',
+    description: '闸门 1：受控白名单拒绝',
+  },
+  'proposal.gate_clamped': {
+    domain: 'proposal',
+    http: 200,
+    gate: 'gate_clamped',
+    description: '闸门 2：值域 clamp（执行成功但被夹紧，details 带夹紧前后值；2xx 语义）',
+  },
+  'proposal.gate_rate_limited': {
+    domain: 'proposal',
+    http: 429,
+    gate: 'gate_rate_limited',
+    description: '闸门 3：频率限制',
+  },
+  'proposal.gate_conflict': {
+    domain: 'proposal',
+    http: 409,
+    gate: 'gate_conflict',
+    description: '闸门 4：同设备冲突提案排队',
+  },
+  'proposal.gate_circuit_open': {
+    domain: 'proposal',
+    http: 503,
+    gate: 'gate_circuit_open',
+    description: '闸门 5：全局熔断，系统降级 advisory',
+  },
+  'mv.baseline_not_active': {
+    domain: 'mv',
+    http: 409,
+    description: 'M&V 基线不在有效期',
+  },
+  'mv.period_invalid': {
+    domain: 'mv',
+    http: 422,
+    description: 'M&V 核证期参数无效',
+  },
+  'alarm.rule_not_found': {
+    domain: 'alarm',
+    http: 404,
+    description: '告警规则不存在',
+  },
+};
+
+/** 值是否在首版种子表内（客户端 API-ERR-02 兜底分支的判据）。 */
+export function isReasonCode(value: string): value is ReasonCode {
+  return (REASON_CODES as readonly string[]).includes(value);
+}
+
+/** 种子码的 HTTP 状态（种子表外取值编译期即拒绝；运行时未知值先过 isReasonCode）。 */
+export function httpStatusForReasonCode(code: ReasonCode): number {
+  return REASON_CODE_REGISTRY[code].http;
+}
+
+/**
+ * modules/overview.md 设计期大写码 → 落码小写风格的映射表（platform.md §5.2 末段、
+ * implementation-plan §8 对齐事项 1：IMPL-2 做一次映射随 shared-types 入库）。
+ *
+ * 规则（与 §5.2 的四个机械映射示例一致）：
+ * - 目标码取 `<domain>.<cause>` 小写蛇形；domain 取该码所属业务域/端点域；
+ * - 目标在首版种子表内的（语义逐条对照过）：直接用种子码；
+ * - 目标不在种子表内的为**草案码**：随对应模块落码时按 §5.2 治理走 PR 注册进种子表，
+ *   注册前不得由服务端发出。
+ */
+export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
+  // ── 通用（overview §2 通用 reason_code 表）→ 种子码 ──
+  VALIDATION_FAILED: 'common.validation_failed',
+  INTERNAL_ERROR: 'common.internal_error',
+  TOKEN_EXPIRED: 'auth.token_expired',
+  FORBIDDEN: 'auth.forbidden',
+  LOGIN_FAILED: 'auth.invalid_credentials',
+  NOT_FOUND: 'asset.not_found', // overview §2：资源不存在或跨租户/越楼宇（SEC-AZ-03 统一 404）
+  BUILDING_NAME_REQUIRED: 'common.validation_failed',
+  // ── 资产域 → 种子码（asset.not_found 覆盖 building/system/equipment/point，§5.2）──
+  BUILDING_NOT_FOUND: 'asset.not_found',
+  SYSTEM_NOT_FOUND: 'asset.not_found',
+  POINT_NOT_FOUND: 'asset.not_found',
+  // ── 闸门 → 种子码（执行结果侧展示码，overview M5；与 §5.2 逐条对照）──
+  PROPOSAL_GATE_WHITELIST_DENIED: 'proposal.gate_not_whitelisted',
+  PROPOSAL_GATE_RATE_LIMITED: 'proposal.gate_rate_limited',
+  PROPOSAL_GATE_CONFLICT_QUEUED: 'proposal.gate_conflict',
+  PROPOSAL_GATE_SYSTEM_FUSED: 'proposal.gate_circuit_open',
+  // ── 告警域 → 种子码 ──
+  ALARM_RULE_NOT_FOUND: 'alarm.rule_not_found',
+  // ── platform.md §5.2 明示的四个机械映射（目标为草案码，随模块落码注册）──
+  PROPOSAL_STATE_INVALID: 'proposal.state_invalid',
+  IMPORT_FILE_INVALID: 'import.file_invalid',
+  STREAM_LIMIT_EXCEEDED: 'stream.limit_exceeded',
+  SERVICE_UNAUTHORIZED: 'auth.service_unauthorized',
+  // ── 认证/用户（M7）草案码 ──
+  UNAUTHENTICATED: 'auth.unauthenticated',
+  REFRESH_REVOKED: 'auth.refresh_revoked',
+  PASSWORD_POLICY_FAILED: 'user.password_policy_failed',
+  USER_NOT_FOUND: 'user.not_found',
+  USER_EMAIL_DUPLICATE: 'user.email_duplicate',
+  SCOPE_BUILDING_MISMATCH: 'user.scope_building_mismatch',
+  // ── 资产/网关/凭证（M1）草案码 ──
+  EQUIPMENT_LOCAL_ID_DUPLICATE: 'asset.local_id_duplicate',
+  GATEWAY_NOT_FOUND: 'gateway.not_found',
+  GATEWAY_SERIAL_DUPLICATE: 'gateway.serial_duplicate',
+  CREDENTIAL_NOT_FOUND: 'credential.not_found',
+  CREDENTIAL_LIMIT_EXCEEDED: 'credential.limit_exceeded',
+  // ── 枚举取值未知（M1 校验类；details 指明字段）草案码 ──
+  SYSTEM_TYPE_UNKNOWN: 'system_type.unknown',
+  EQUIPMENT_TYPE_UNKNOWN: 'equipment_type.unknown',
+  QUANTITY_TYPE_UNKNOWN: 'quantity_type.unknown',
+  ROLE_UNKNOWN: 'role.unknown',
+  // ── 点位域（M1/M3/M8）草案码 ──
+  POINT_NO_DATA: 'point.no_data',
+  POINT_INACTIVE: 'point.inactive',
+  POINT_FIELD_NOT_ALLOWED: 'point.field_not_allowed',
+  GATE_REASON_REQUIRED: 'point.gate_reason_required',
+  GATE_CLAMP_RANGE_INVALID: 'point.gate_clamp_range_invalid',
+  GATE_CONTROLLABLE_REQUIRES_CLAMP: 'point.gate_controllable_requires_clamp',
+  GATE_RATE_INVALID: 'point.gate_rate_invalid',
+  CONTROL_MODE_TRANSITION_INVALID: 'point.control_mode_transition_invalid',
+  CONTROL_MODE_SAME: 'point.control_mode_same',
+  CONTROL_MODE_POINT_NOT_CONTROLLABLE: 'point.control_mode_point_not_controllable',
+  TELEMETRY_RANGE_INVALID: 'telemetry.range_invalid',
+  // ── 导入域（M2）草案码 ──
+  IMPORT_NOT_FOUND: 'import.not_found',
+  IMPORT_STATE_INVALID: 'import.state_invalid',
+  IMPORT_TEMPLATE_MISMATCH: 'import.template_mismatch',
+  IMPORT_APPLY_CONFLICT: 'import.apply_conflict',
+  SELFCHECK_NOT_READY: 'import.selfcheck_not_ready',
+  UNIT_CONVERSION_UNSUPPORTED: 'import.unit_conversion_unsupported',
+  // ── 告警域其余（M4）草案码 ──
+  ALARM_NOT_FOUND: 'alarm.not_found',
+  ALARM_STATE_INVALID: 'alarm.state_invalid',
+  ALARM_RULE_SCOPE_INVALID: 'alarm.rule_scope_invalid',
+  ALARM_RULE_PARAMS_INVALID: 'alarm.rule_params_invalid',
+  SUPPRESS_DURATION_INVALID: 'alarm.suppress_duration_invalid',
+  // ── 提案域其余（M5）草案码 ──
+  PROPOSAL_NOT_FOUND: 'proposal.not_found',
+  PROPOSAL_EXPIRED: 'proposal.expired',
+  PROPOSAL_VERIFY_FAILED: 'proposal.verify_failed',
+  PROPOSAL_PAYLOAD_INVALID: 'proposal.payload_invalid',
+  // ── FDD（M6）/ 组态（M3）草案码 ──
+  FDD_FINDING_NOT_FOUND: 'fdd.finding_not_found',
+  FDD_REPORT_NOT_FOUND: 'fdd.report_not_found',
+  SCENE_NOT_FOUND: 'scene.not_found',
+};

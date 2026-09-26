@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: lint + typecheck + test（platform.md §4 门禁）
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm（读 packageManager 字段）
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # 门禁（platform.md §4）：lint + typecheck + test 全绿才可合并；
+      # test 内含枚举快照测试（shared-types）——改枚举必须显式改快照。
+      - name: Lint / typecheck / test
+        run: pnpm exec turbo run lint typecheck test

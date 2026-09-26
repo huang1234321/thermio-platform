@@ -22,10 +22,11 @@ describe('reason_code registry', () => {
     }
   });
 
-  it('shouldRegisterExactlyTwentyOneCodes_seventeenSeedsPlusImpl7AndImpl12Additions', () => {
-    // §5.2 首版 17 码 + IMPL-12 三遥测码（DAT-115）+ IMPL-7 auth.service_unauthorized
-    // （DAT-110，§11-2）——两批增量均走 PR 治理，数组注释留痕。
-    expect(REASON_CODES).toHaveLength(21);
+  it('shouldRegisterExactlyTwentyTwoCodes_eighteenSeedsPlusImpl7AndImpl12Additions', () => {
+    // §5.2 种子 18 码（common.not_found 随 DAT-119 / DAT-96 收尾增补）+
+    // IMPL-12 三遥测码（DAT-115）+ IMPL-7 auth.service_unauthorized（DAT-110，
+    // §11-2）——两批增量均走 PR 治理，数组注释留痕。
+    expect(REASON_CODES).toHaveLength(22);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {
@@ -43,6 +44,7 @@ describe('reason_code registry', () => {
     expect(httpStatusForReasonCode('proposal.gate_circuit_open')).toBe(503);
     expect(httpStatusForReasonCode('common.internal_error')).toBe(500);
     expect(httpStatusForReasonCode('common.validation_failed')).toBe(422);
+    expect(httpStatusForReasonCode('common.not_found')).toBe(404);
   });
 
   it('shouldTagExactlyFiveGates_withCauseSubstringsAsMetricLabels', () => {

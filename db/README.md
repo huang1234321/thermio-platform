@@ -1,17 +1,18 @@
 # db/ — PostgreSQL 迁移链与租户开通（IMPL-3）
 
-业务真相源（PG 侧）迁移资产。蓝本：伞仓 `docs/design/ddl.md` v1.0（§3/§4 原样落盘）。
+业务真相源（PG 侧）迁移资产。蓝本：伞仓 `docs/design/ddl.md` v1.1（§3/§4/§9.4 原样落盘）。
 
 ## 目录
 
 | 路径 | 内容 |
 |---|---|
 | `bootstrap/pg-roles.sql` | 角色 bootstrap（ddl.md §3 原样；psql 执行，**不入** goose 版本链） |
-| `migrations/pg/` | goose 迁移链（`0001_init.sql` = ddl.md §4 原样，19 表 + RLS + 角色授权） |
+| `migrations/pg/` | goose 迁移链（`0001_init.sql` = ddl.md §4 原样，19 表 + RLS + 角色授权；`0002_alarm_event_tenant_uidx.sql` = §9.4，CONCURRENTLY 单文件补 `alarm_event` 复合唯一索引；`0003_import_fdd_fuse.sql` = §9.4，import/FDD/熔断六表 + RLS + 授权，19→25 表） |
 | `scripts/create-tenant.sh` | 租户开通运维脚本（ddl.md §5.3 superuser 通道，幂等可重跑） |
 | `scripts/verify-rls.sh` | ddl.md §8 用例 2–6 脚本化复跑（RLS 隔离 / fail-closed / 角色矩阵） |
+| `scripts/verify-v11.sh` | ddl.md §9.6 用例 2–9 脚本化复跑（0002/0003 六新表：DML 状态机 / CHECK 封闭集 / 活跃唯一 / FK RESTRICT / RLS 隔离 / 最小权 / 索引 / touch 触发器） |
 
-CI：`.github/workflows/db-migration-smoke.yml`（compose 外的一次性干净 PG 容器上跑 goose up/down 往返 + RLS 验证 + 租户幂等）。
+CI：`.github/workflows/db-migration-smoke.yml`（compose 外的一次性干净 PG 容器上跑 goose up/down 往返（25 表断言）+ RLS 验证 + §9.6 增量用例 + 租户幂等）。
 
 ## 执行顺序契约（ddl.md §1）
 
@@ -42,7 +43,7 @@ CI：`.github/workflows/db-migration-smoke.yml`（compose 外的一次性干净 
 
 ## 与蓝本的唯一差异
 
-`0001_init.sql` 的 RLS `DO $$ … $$;` 块（ddl.md §4 第 8 节）外层包了一对 `-- +goose StatementBegin` / `-- +goose StatementEnd` 注解：goose 逐行按分号切分语句，多行 dollar-quoted 块会在块内分号处被截断（实跑验证发现，蓝本当时用 psql 验证未暴露）。注解是 goose 文件格式的语句包裹指令，SQL 文本零改动，psql 直跑不受影响。除此之外与 ddl.md §4 逐字一致。
+`0001_init.sql` 与 `0003_import_fdd_fuse.sql` 的 RLS `DO $$ … $$;` 块（ddl.md §4 第 8 节 / §9.4 第 13 节）外层各包了一对 `-- +goose StatementBegin` / `-- +goose StatementEnd` 注解：goose 逐行按分号切分语句，多行 dollar-quoted 块会在块内分号处被截断（0001 实跑验证发现，蓝本当时用 psql 验证未暴露；0003 为同一 DO 块结构，同因同解）。注解是 goose 文件格式的语句包裹指令，SQL 文本零改动，psql 直跑不受影响。除此之外与 ddl.md §4/§9.4 逐字一致。
 
 ## 本地冒烟（一次性容器，环境隔离纪律）
 
@@ -66,8 +67,9 @@ goose -dir db/migrations/pg postgres \
 goose -dir db/migrations/pg postgres \
   "postgres://postgres:postgres@127.0.0.1:55432/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
 
-# 3) RLS 验证 + 租户开通幂等（容器内 psql，socket trust 通道）
+# 3) RLS 验证 + §9.6 增量用例 + 租户开通幂等（容器内 psql，socket trust 通道）
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/verify-rls.sh
+docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/verify-v11.sh
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/create-tenant.sh -- \
   --slug demo --name "演示租户" --admin-email admin@demo.local --admin-password-hash '(argon2id/bcrypt 串)'
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/create-tenant.sh -- \

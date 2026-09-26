@@ -1,0 +1,100 @@
+name: db-migration-smoke
+
+on:
+  push:
+    branches: [main]
+    paths: ['db/**', '.github/workflows/db-migration-smoke.yml']
+  pull_request:
+    paths: ['db/**', '.github/workflows/db-migration-smoke.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: db-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pg-migration-smoke:
+    name: PG 迁移冒烟（goose up/down 往返 + RLS + 租户幂等，IMPL-3）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PG_CONTAINER: thermio-smoke-pg
+      PG_PORT: "55432"
+      GOOSE_VERSION: v3.24.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go（装 goose）
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      # 一次性干净 PG 容器，跑完即清（环境隔离纪律：不连任何既有服务）
+      - name: Start one-off PostgreSQL 16
+        run: |
+          docker run -d --name "$PG_CONTAINER" \
+            -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=thermio \
+            -p 127.0.0.1:${PG_PORT}:5432 postgres:16.4-alpine
+          for i in $(seq 1 30); do
+            docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && echo "PG ready" && exit 0
+            sleep 2
+          done
+          echo "PG 未就绪" >&2; exit 1
+
+      # 密码现场随机生成，不落源码/测试固件（SEC-KEY-01）
+      - name: Bootstrap 角色（ddl.md §3，先 bootstrap 后迁移）
+        run: |
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d thermio \
+            -v api_password="$(openssl rand -hex 16)" \
+            -v ingest_password="$(openssl rand -hex 16)" \
+            -v auth_password="$(openssl rand -hex 16)" \
+            -f - < db/bootstrap/pg-roles.sql
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
+
+      # 迁移执行角色 thermio_owner（NOLOGIN）：连接参数 SET ROLE（ddl.md §1/§5.1）
+      - name: goose up（19 表建立）
+        run: |
+          "$(go env GOPATH)/bin/goose" -dir db/migrations/pg postgres \
+            "postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
+          tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
+          [ "$tables" = "19" ] || { echo "期望 19 表，实际 $tables" >&2; exit 1; }
+
+      - name: goose down-to 0（回滚干净）再 up（往返一致性）
+        run: |
+          GOOSE="$(go env GOPATH)/bin/goose"
+          DB="postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner"
+          "$GOOSE" -dir db/migrations/pg postgres "$DB" down-to 0
+          tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
+          [ "$tables" = "0" ] || { echo "回滚后期望 0 表，实际 $tables" >&2; exit 1; }
+          "$GOOSE" -dir db/migrations/pg postgres "$DB" up
+
+      - name: RLS 验证（ddl.md §8 用例 2–6）
+        run: |
+          docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
+            bash -s < db/scripts/verify-rls.sh
+
+      - name: 租户开通幂等（执行两次结果一致）
+        run: |
+          HASH='$argon2id$v=19$m=65536,t=3,p=1$c21vbGVzYWx0$Zm9vYmFy'  # 冒烟占位哈希，非真实口令
+          ARGS=(--slug ci-smoke --name CI冒烟 --admin-email admin@ci-smoke.local --admin-password-hash "$HASH")
+          TID1=$(docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
+            bash -s < db/scripts/create-tenant.sh -- "${ARGS[@]}" | grep -o 'tenant_id=[0-9a-f-]*' | cut -d= -f2)
+          COUNTS1=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
+            "SELECT (SELECT count(*) FROM tenant WHERE slug='ci-smoke'), (SELECT count(*) FROM role), (SELECT count(*) FROM app_user), (SELECT count(*) FROM user_role)")
+          TID2=$(docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
+            bash -s < db/scripts/create-tenant.sh -- "${ARGS[@]}" | grep -o 'tenant_id=[0-9a-f-]*' | cut -d= -f2)
+          COUNTS2=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
+            "SELECT (SELECT count(*) FROM tenant WHERE slug='ci-smoke'), (SELECT count(*) FROM role), (SELECT count(*) FROM app_user), (SELECT count(*) FROM user_role)")
+          echo "run1: tenant_id=$TID1 counts=$COUNTS1"
+          echo "run2: tenant_id=$TID2 counts=$COUNTS2"
+          [ -n "$TID1" ] && [ "$TID1" = "$TID2" ] && [ "$COUNTS1" = "$COUNTS2" ] \
+            || { echo "租户脚本非幂等" >&2; exit 1; }
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f "$PG_CONTAINER" || true

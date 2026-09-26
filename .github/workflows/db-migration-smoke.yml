@@ -55,13 +55,13 @@ jobs:
         run: go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
 
       # 迁移执行角色 thermio_owner（NOLOGIN）：连接参数 SET ROLE（ddl.md §1/§5.1）
-      - name: goose up（19 表建立）
+      - name: goose up（25 表建立，0001–0003）
         run: |
           "$(go env GOPATH)/bin/goose" -dir db/migrations/pg postgres \
             "postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
           tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
-          [ "$tables" = "19" ] || { echo "期望 19 表，实际 $tables" >&2; exit 1; }
+          [ "$tables" = "25" ] || { echo "期望 25 表，实际 $tables" >&2; exit 1; }
 
       - name: goose down-to 0（回滚干净）再 up（往返一致性）
         run: |
@@ -72,11 +72,19 @@ jobs:
             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
           [ "$tables" = "0" ] || { echo "回滚后期望 0 表，实际 $tables" >&2; exit 1; }
           "$GOOSE" -dir db/migrations/pg postgres "$DB" up
+          tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
+          [ "$tables" = "25" ] || { echo "重 Up 后期望 25 表，实际 $tables" >&2; exit 1; }
 
       - name: RLS 验证（ddl.md §8 用例 2–6）
         run: |
           docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
             bash -s < db/scripts/verify-rls.sh
+
+      - name: 增量用例验证（ddl.md §9.6 用例 2–9，0002/0003 六新表）
+        run: |
+          docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
+            bash -s < db/scripts/verify-v11.sh
 
       - name: 租户开通幂等（执行两次结果一致）
         run: |

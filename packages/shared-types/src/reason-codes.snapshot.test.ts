@@ -31,14 +31,23 @@ describe('reason_code registry snapshot', () => {
         "auth.invalid_credentials": {
           "http": 401,
         },
+        "auth.refresh_revoked": {
+          "http": 401,
+        },
         "auth.service_unauthorized": {
           "http": 401,
         },
         "auth.token_expired": {
           "http": 401,
         },
+        "auth.unauthenticated": {
+          "http": 401,
+        },
         "common.internal_error": {
           "http": 500,
+        },
+        "common.rate_limited": {
+          "http": 429,
         },
         "common.validation_failed": {
           "http": 422,
@@ -78,11 +87,26 @@ describe('reason_code registry snapshot', () => {
           "gate": "gate_rate_limited",
           "http": 429,
         },
+        "role.unknown": {
+          "http": 422,
+        },
         "telemetry.range_invalid": {
           "http": 422,
         },
         "telemetry.store_unavailable": {
           "http": 503,
+        },
+        "user.email_duplicate": {
+          "http": 409,
+        },
+        "user.not_found": {
+          "http": 404,
+        },
+        "user.password_policy_failed": {
+          "http": 422,
+        },
+        "user.scope_building_mismatch": {
+          "http": 404,
         },
       }
     `);

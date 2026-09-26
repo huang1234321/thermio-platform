@@ -5,7 +5,9 @@
  * 且 kafka 停用是合法形态，不能让存活探针翻红）。不进 /api/v1 前缀。
  */
 import { Controller, Get } from '@nestjs/common';
+import { Public } from '../auth/public.decorator.js';
 
+@Public()
 @Controller('healthz')
 export class HealthController {
   @Get()

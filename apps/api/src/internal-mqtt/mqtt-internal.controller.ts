@@ -25,7 +25,14 @@ import {
 } from './contract.js';
 import { MqttEventsService } from './events.service.js';
 import { ServiceAuthGuard } from './service-auth.guard.js';
+import { Public } from '../auth/public.decorator.js';
 
+/**
+ * @Public（IMPL-10 接线）：豁免全局 JwtAuthGuard（用户会话守卫）——本控制器由
+ * ServiceAuthGuard 承担认证（Bearer 服务凭证，platform.md §11-2），EMQX webhook
+ * 不持有用户令牌；两层守卫职责互不重叠，豁免不降低该面安全。
+ */
+@Public()
 @Controller('internal/mqtt')
 @UseGuards(ServiceAuthGuard)
 export class MqttInternalController {

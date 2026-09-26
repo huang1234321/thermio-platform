@@ -1,4 +1,4 @@
 {
   "extends": "@thermio/tsconfig/app.json",
-  "include": ["src"]
+  "include": ["src", "vite.config.ts"]
 }

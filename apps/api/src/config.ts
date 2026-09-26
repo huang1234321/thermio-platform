@@ -78,6 +78,19 @@ const AppConfigSchema = z.object({
   EMQX_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(1_000).default(60_000),
   MQTT_AUTH_FAIL_LIMIT: z.coerce.number().int().min(1).default(10),
   MQTT_AUTH_FAIL_WINDOW_MS: z.coerce.number().int().min(1_000).default(300_000),
+  // ── PG 连接（IMPL-10；ddl.md §5.1 角色矩阵：api 业务读写 / auth 登录解析旁路）──
+  // 连接串含口令只来自环境变量（SEC-KEY-01）；空值 = 数据库未接线（骨架期健康起服）。
+  PG_API_URL: z.string().default(''),
+  PG_AUTH_URL: z.string().default(''),
+  // ── 认证会话（SEC-AZ-04：短时效 + 服务端可撤销）──
+  AUTH_JWT_SECRET: z.string().min(32).default(''),
+  AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
+  AUTH_REFRESH_TTL_SECONDS: z.coerce.number().int().min(600).max(2_592_000).default(604_800), // 7d
+  // 登录防爆破限速（SEC-PW-04）："次数/窗口秒"，默认 10 次 / 300s（按 email+IP 计）
+  AUTH_LOGIN_RATE_LIMIT: z
+    .string()
+    .regex(/^\d{1,4}\/\d{1,5}$/)
+    .default('10/300'),
 });
 
 export interface AppConfig extends z.infer<typeof AppConfigSchema> {
@@ -91,6 +104,8 @@ export interface AppConfig extends z.infer<typeof AppConfigSchema> {
   readonly telemetrySpanLimitDays: Readonly<Record<TelemetryInterval, number>>;
   /** 对账是否启用（EMQX_MANAGEMENT_BASE_URL 非空）。 */
   readonly emqxReconcileEnabled: boolean;
+  /** 认证域是否启用（PG_API_URL/PG_AUTH_URL/AUTH_JWT_SECRET 三者齐备）。 */
+  readonly authEnabled: boolean;
 }
 
 /** 解析并校验环境变量；畸形值直接失败快（启动期报错优于运行期漂移）。 */
@@ -116,5 +131,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       '1h': parsed.TELEMETRY_1H_SPAN_MAX_DAYS,
     },
     emqxReconcileEnabled: parsed.EMQX_MANAGEMENT_BASE_URL.length > 0,
+    authEnabled:
+      parsed.PG_API_URL.length > 0 &&
+      parsed.PG_AUTH_URL.length > 0 &&
+      parsed.AUTH_JWT_SECRET.length > 0,
   };
 }

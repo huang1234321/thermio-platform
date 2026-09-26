@@ -46,14 +46,28 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * 二批注册（IMPL-7 / DAT-110，EMQX 内部端点服务认证，platform.md §11-2）：
  * auth.service_unauthorized——OVERVIEW_DESIGN_CODE_ALIASES 的 SERVICE_UNAUTHORIZED
  * 草案映射自此指向种子码。
+ *
+ * 三批注册（IMPL-10 / DAT-113，认证会话与 RBAC，modules M7 + platform.md §12 限速骨架）：
+ * - common.rate_limited：§12「命中限速 429」落码（登录防爆破，SEC-PW-04）；
+ * - auth.unauthenticated / auth.refresh_revoked：M7 草案（UNAUTHENTICATED / REFRESH_REVOKED）；
+ * - user.password_policy_failed / user.not_found / user.email_duplicate / user.scope_building_mismatch；
+ * - role.unknown：M7 草案（ROLE_UNKNOWN）。
  */
 export const REASON_CODES = [
   'common.validation_failed',
   'common.internal_error',
+  'common.rate_limited',
   'auth.invalid_credentials',
   'auth.token_expired',
+  'auth.unauthenticated',
+  'auth.refresh_revoked',
   'auth.forbidden',
   'auth.service_unauthorized',
+  'user.password_policy_failed',
+  'user.not_found',
+  'user.email_duplicate',
+  'user.scope_building_mismatch',
+  'role.unknown',
   'asset.not_found',
   'asset.duplicate_raw_name',
   'point.not_controllable',
@@ -95,6 +109,11 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 500,
     description: '未知异常兜底（只此一个 5xx 文案出口）',
   },
+  'common.rate_limited': {
+    domain: 'common',
+    http: 429,
+    description: '命中限速（platform.md §12 骨架码；登录防爆破 SEC-PW-04）',
+  },
   'auth.invalid_credentials': {
     domain: 'auth',
     http: 401,
@@ -105,6 +124,16 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 401,
     description: '会话过期（可刷新）',
   },
+  'auth.unauthenticated': {
+    domain: 'auth',
+    http: 401,
+    description: '未认证（缺 Bearer 令牌或令牌不可用，M7 UNAUTHENTICATED）',
+  },
+  'auth.refresh_revoked': {
+    domain: 'auth',
+    http: 401,
+    description: 'refresh token 已撤销/已轮换/不匹配（M7 REFRESH_REVOKED；复用检测即撤销会话）',
+  },
   'auth.forbidden': {
     domain: 'auth',
     http: 403,
@@ -114,6 +143,31 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'auth',
     http: 401,
     description: '内部端点服务凭证校验失败（platform.md §11-2：不泄露具体失败步骤，API-ERR-04）',
+  },
+  'user.password_policy_failed': {
+    domain: 'user',
+    http: 422,
+    description: '密码不符合策略（SEC-PW-01/02：自适应慢哈希口径 + 长度 ≥8 含字母数字）',
+  },
+  'user.not_found': {
+    domain: 'user',
+    http: 404,
+    description: '用户不存在或不在本租户（越租户同 404，文案不区分，SEC-AZ-03）',
+  },
+  'user.email_duplicate': {
+    domain: 'user',
+    http: 409,
+    description: '租户内邮箱已存在（UNIQUE (tenant_id, email)）',
+  },
+  'user.scope_building_mismatch': {
+    domain: 'user',
+    http: 404,
+    description: '楼宇范围含无效/越租户项（统一 404 不区分成因，SEC-AZ-03）',
+  },
+  'role.unknown': {
+    domain: 'role',
+    http: 422,
+    description: '角色取值不在 MVP 三角色集（admin/operator/viewer）',
   },
   'asset.not_found': {
     domain: 'asset',
@@ -246,7 +300,7 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   POINT_NOT_FOUND: 'asset.not_found',
   // ── 通用表其余（overview §2；无业务域归属 → common.*，规式第 3 条）草案码 ──
   CONFLICT: 'common.version_conflict', // 乐观并发冲突（版本不符，409）；宁具体勿泛化取 version_conflict
-  RATE_LIMITED: 'common.rate_limited', // platform.md §6 容量限流节明示的骨架码原字
+  RATE_LIMITED: 'common.rate_limited', // platform.md §6 明示骨架码原字；IMPL-10 注册入种子表
   // ── 闸门 → 种子码（执行结果侧展示码，overview M5；与 §5.2 逐条对照）──
   PROPOSAL_GATE_WHITELIST_DENIED: 'proposal.gate_not_whitelisted',
   PROPOSAL_GATE_RATE_LIMITED: 'proposal.gate_rate_limited',

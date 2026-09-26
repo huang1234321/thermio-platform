@@ -1,0 +1,4 @@
+{
+  "extends": "@thermio/tsconfig/app.json",
+  "include": ["src"]
+}

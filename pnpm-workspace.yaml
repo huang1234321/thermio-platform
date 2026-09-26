@@ -1,0 +1,17 @@
+packages:
+  - apps/*
+  - packages/*
+  - tooling/*
+
+# 单一版本纪律（platform.md §2.1）：TypeScript 等关键工具经 catalog 统一，
+# 各包以 "catalog:" 引用，避免版本分裂导致类型漂移。
+catalog:
+  typescript: ~5.9.3
+  eslint: ^9.39.5
+  typescript-eslint: ^8.70.1
+  vitest: ^5.0.2
+  zod: ^4.6.5
+
+# pnpm 10 默认拦截依赖构建脚本；husky 需要安装 git hooks。
+onlyBuiltDependencies:
+  - husky

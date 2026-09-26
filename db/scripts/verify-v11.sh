@@ -15,6 +15,7 @@
 #       （SET ROLE 切换被测角色），角色策略按 current_user 生效，等价于真实登录连接。
 # 连接：PG* 环境变量（默认 PGUSER=postgres / PGDATABASE=thermio，容器 socket trust 通道即可）。
 # 退出：全部通过 exit 0；任一失败 exit 1（FAIL 汇总在末尾）。
+#   DAT-107：末次清理退出码计入 FAIL；INT/TERM/HUP trap 兜底清夹具后以 128+信号值退出。
 set -uo pipefail
 
 PGDATABASE="${PGDATABASE:-thermio}"
@@ -76,6 +77,16 @@ DELETE FROM tenant WHERE slug IN ('_v11_a','_v11_b');
 COMMIT;
 SQL
 }
+
+# ── trap 兜底：中断信号先清夹具再退（正常退出路径不受影响；清理幂等可重入） ──
+on_interrupt() {
+  cleanup_fixture || echo "WARN: 中断兜底清理失败，夹具残留可重跑自愈" >&2
+  exit $((128 + $1))
+}
+trap 'on_interrupt 2' INT   # 130
+trap 'on_interrupt 15' TERM # 143
+trap 'on_interrupt 1' HUP   # 129
+
 cleanup_fixture
 
 # ── 夹具：双租户 + 租户 A 资产链（tenant→building→hvac_system→equipment、gateway、app_user、alarm_event） ──
@@ -226,8 +237,11 @@ psql_exec -c "UPDATE import_row SET updated_at = now() - interval '1 hour' WHERE
 expect_count "import_row touch 触发器推进 updated_at" 1 \
   "SET ROLE thermio_api; BEGIN; SET LOCAL app.tenant_id = '${TENANT_A}'; WITH upd AS (UPDATE import_row SET raw_description = 'V11复核' WHERE tenant_id = '${TENANT_A}'::uuid RETURNING updated_at) SELECT count(*) FROM upd WHERE updated_at > now() - interval '1 minute'; ROLLBACK;"
 
-# ── 清理夹具（逆依赖序，RESTRICT 纪律） ──
-cleanup_fixture
+# ── 清理夹具（逆依赖序，RESTRICT 纪律）；末次清理退出码检查（DAT-107） ──
+if ! cleanup_fixture; then
+  echo "FAIL: 末次夹具清理非零退出（连接闪断/SQL 失败），残留由下次先清后建自愈"
+  FAIL=$((FAIL + 1))
+fi
 
 echo "== 结果：PASS=${PASS} FAIL=${FAIL} =="
 [ "$FAIL" -eq 0 ]

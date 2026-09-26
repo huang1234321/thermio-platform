@@ -16,6 +16,7 @@
     "@nestjs/platform-express": "^12.1.0",
     "@node-rs/argon2": "^2.2.1",
     "@thermio/shared-types": "workspace:*",
+    "jose": "^6.2.12",
     "kafkajs": "^2.2.4",
     "pg": "^8.23.0",
     "pino": "^10.3.1",

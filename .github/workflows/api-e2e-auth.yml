@@ -1,0 +1,91 @@
+name: api-e2e-auth
+
+# IMPL-10（DAT-113）：认证/RBAC/租户上下文 e2e——一次性干净 PG 容器上
+# bootstrap + goose 迁移 + vitest（PG 门控用例只在有库环境运行）。
+# 环境隔离纪律：不连任何既有服务；口令现场生成（SEC-KEY-01，同 db-migration-smoke 形态）。
+on:
+  push:
+    branches: [main]
+    paths:
+      ['apps/api/**', 'packages/shared-types/**', 'db/**', '.github/workflows/api-e2e-auth.yml']
+  pull_request:
+    paths:
+      ['apps/api/**', 'packages/shared-types/**', 'db/**', '.github/workflows/api-e2e-auth.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: api-e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-auth-e2e:
+    name: api 认证/RLS e2e（一次性 PG，IMPL-10 验收要点）
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PG_CONTAINER: thermio-api-e2e-pg
+      PG_PORT: '55434'
+      GOOSE_VERSION: v3.24.3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm（读 packageManager 字段）
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Go（装 goose）
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start one-off PostgreSQL 16
+        run: |
+          docker run -d --name "$PG_CONTAINER" \
+            -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=thermio \
+            -p 127.0.0.1:${PG_PORT}:5432 postgres:16.4-alpine
+          for i in $(seq 1 30); do
+            docker exec "$PG_CONTAINER" pg_isready -U postgres >/dev/null 2>&1 && echo "PG ready" && exit 0
+            sleep 2
+          done
+          echo "PG 未就绪" >&2; exit 1
+
+      # 口令/签名钥现场随机生成、跨步骤经 GITHUB_ENV 传递（不落源码/测试固件，SEC-KEY-01）
+      - name: Bootstrap 角色 + 迁移（先 bootstrap 后迁移，db/README 执行顺序契约）
+        run: |
+          API_PW="$(openssl rand -hex 16)"
+          AUTH_PW="$(openssl rand -hex 16)"
+          JWT_SECRET="$(openssl rand -hex 32)"
+          echo "THERMIO_API_PW=$API_PW" >> "$GITHUB_ENV"
+          echo "THERMIO_AUTH_PW=$AUTH_PW" >> "$GITHUB_ENV"
+          echo "THERMIO_JWT_SECRET=$JWT_SECRET" >> "$GITHUB_ENV"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d thermio \
+            -v api_password="$API_PW" \
+            -v ingest_password="$(openssl rand -hex 16)" \
+            -v auth_password="$AUTH_PW" \
+            -f - < db/bootstrap/pg-roles.sql
+          "$(go env GOPATH)/bin/goose" -dir db/migrations/pg postgres \
+            "postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
+
+      - name: Run api e2e（auth + tenant RLS，验收要点载体）
+        env:
+          PG_E2E_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable
+          PG_E2E_API_URL: postgres://thermio_api:${{ env.THERMIO_API_PW }}@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable
+
+          AUTH_JWT_SECRET: ${{ env.THERMIO_JWT_SECRET }}
+        run: pnpm exec turbo run test --filter=@thermio/api
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f "$PG_CONTAINER" || true

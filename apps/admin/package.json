@@ -4,13 +4,30 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@thermio/shared-types": "workspace:*",
+    "antd": "^5.27.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^7.9.4"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.0",
     "@thermio/eslint-config": "workspace:*",
     "@thermio/tsconfig": "workspace:*",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^5.0.4",
     "eslint": "catalog:",
-    "typescript": "catalog:"
+    "jsdom": "^26.1.0",
+    "typescript": "catalog:",
+    "vite": "^7.1.11",
+    "vitest": "catalog:"
   }
 }

@@ -4,8 +4,10 @@
  */
 import { Controller, Get, Inject, Response } from '@nestjs/common';
 import type { Response as ExpressResponse } from 'express';
+import { Public } from '../../auth/public.decorator.js';
 import { MetricsService } from './metrics.service.js';
 
+@Public()
 @Controller('metrics')
 export class MetricsController {
   constructor(@Inject(MetricsService) private readonly metrics: MetricsService) {}

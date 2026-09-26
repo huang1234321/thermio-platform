@@ -1,0 +1,18 @@
+# gitleaks 配置（SEC-KEY-03：仓库凭据扫描门禁；豁免须评审说明）
+#
+# useDefault：完整保留 gitleaks 内置规则集（缺省则规则清零、门禁形同虚设）；
+# 豁免清单——仅收录「公开测试固件」类命中，逐条给因：
+# 1. apps/api/src/auth/tokens.test.ts：HMAC 签名/验签单测需要**确定性**签名钥样本
+#    （运行时随机则断言不可复现）。字面量仅存在于测试进程内存，不接触任何环境，
+#    非凭据；generic-api-key 规则按「SECRET 标识符 + 高熵字面量」误报。
+# 新增豁免：必须在此逐条注释用途，禁止路径级大范围放行。
+title = "thermio-platform gitleaks config"
+
+[extend]
+  useDefault = true
+
+[allowlist]
+  description = "Public test fixtures (deterministic literals, not credentials)"
+  paths = [
+    '''apps/api/src/auth/tokens\.test\.ts''',
+  ]

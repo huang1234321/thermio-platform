@@ -66,6 +66,11 @@ export const ROLES = ['admin', 'operator', 'viewer'] as const;
 export const RoleSchema = z.enum(ROLES);
 export type Role = z.infer<typeof RoleSchema>;
 
+/** 用户状态（ddl.md §4 app_user.status CHECK）。 */
+export const USER_STATUSES = ['active', 'disabled'] as const;
+export const UserStatusSchema = z.enum(USER_STATUSES);
+export type UserStatus = z.infer<typeof UserStatusSchema>;
+
 /** 提案状态机（DATA-MODEL §3.5 proposal.status）。 */
 export const PROPOSAL_STATUSES = [
   'pending',

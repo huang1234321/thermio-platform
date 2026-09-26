@@ -257,6 +257,74 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
     });
   });
 
+  describe('入站 id 头硬化（DAT-96 评审#1 / DAT-120）', () => {
+    it('shouldPassThrough_whenIncomingIdUsesOnlyWhitelistedChars', async () => {
+      // 白名单全字符类各一：字母/数字/`_`-`.`:`（覆盖 W3C traceparent、B3 等网关形状）
+      const legal = 'Req_01J8Z-abc.99:1';
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/probe/asset-not-found')
+        .set('x-request-id', legal)
+        .set('x-trace-id', 'trc_ext-01.2:3')
+        .expect(404);
+      expect(res.body.error.request_id).toBe(legal);
+      expect(res.headers['x-request-id']).toBe(legal);
+      expect(res.headers['x-trace-id']).toBe('trc_ext-01.2:3');
+    });
+
+    it('shouldPassThrough_atExactly128Chars_andRegenerateAt129', async () => {
+      const atCap = 'a'.repeat(128);
+      const ok = await request(app.getHttpServer())
+        .get('/api/v1/probe/asset-not-found')
+        .set('x-request-id', atCap)
+        .expect(404);
+      expect(ok.headers['x-request-id']).toBe(atCap);
+
+      const overCap = 'b'.repeat(129);
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/probe/asset-not-found')
+        .set('x-request-id', overCap)
+        .expect(404);
+      // 超限：整体重生成，而非截断到 128（截断保留攻击者可控前缀且会制造别名歧义）
+      expect(res.headers['x-request-id']).toMatch(/^req_[0-9a-f]{32}$/);
+      expect(res.headers['x-request-id']).not.toBe(overCap.slice(0, 128));
+      expect(JSON.stringify(res.body)).not.toContain(overCap.slice(0, 128));
+    });
+
+    it('shouldRegenerateAndNeverEcho_whenIncomingIdHasIllegalChars', async () => {
+      // 非 ASCII（CJK 等）在 HTTP 协议层即被客户端/llhttp 拒收，到不了应用——
+      // 真正能进来的非法面是可见 ASCII 里的白名单外字符：引号/花括号/空格等（单测覆盖全矩阵）
+      const illegal = '{"injected":"json"}';
+      const res = await request(app.getHttpServer())
+        .get('/api/v1/probe/asset-not-found')
+        .set('x-request-id', illegal)
+        .set('x-trace-id', 'trc bad id')
+        .expect(404);
+      // 信封与响应头都拿到重生成值，且头体同值（三处消费同源：日志亦读同一上下文）
+      expect(res.body.error.request_id).toMatch(/^req_[0-9a-f]{32}$/);
+      expect(res.headers['x-request-id']).toBe(res.body.error.request_id);
+      expect(res.headers['x-trace-id']).toMatch(/^trc_[0-9a-f]{32}$/);
+      // 非法原值在响应任何面都不出现（信封体/响应头序列化全查）
+      expect(JSON.stringify(res.body)).not.toContain('injected');
+      expect(JSON.stringify(res.headers)).not.toContain('injected');
+      expect(JSON.stringify(res.headers)).not.toContain('trc bad id');
+    });
+
+    it('shouldRegenerateOnTheParserErrorPath_whenIncomingIdIsIllegal', async () => {
+      // QA 阻塞#2 同路径（上下文先于 body-parser 就位）：畸形 JSON + 非法入站 id
+      // 同时出现——解析错误信封同样只携带重生成值，非法值不借道信封透传
+      const res = await request(app.getHttpServer())
+        .post('/api/v1/probe/proposals')
+        .set('Content-Type', 'application/json')
+        .set('x-request-id', 'bad id with spaces')
+        .send('{"broken": json')
+        .expect(422);
+      expect(res.body.error.reason_code).toBe('common.validation_failed');
+      expect(res.body.error.request_id).toMatch(/^req_[0-9a-f]{32}$/);
+      expect(res.headers['x-request-id']).toBe(res.body.error.request_id);
+      expect(res.headers['x-request-id']).not.toContain('bad id');
+    });
+  });
+
   describe('畸形响应客户端兜底（§5.4 / API-ERR-02，契约闭环）', () => {
     it('shouldDriveClientFallbacks_whenParsingOurOwnResponsesWithSharedTypes', async () => {
       // 用与 api-client 同源的 parseApiError 消费本服务真实响应：

@@ -31,6 +31,9 @@ describe('reason_code registry snapshot', () => {
         "auth.invalid_credentials": {
           "http": 401,
         },
+        "auth.service_unauthorized": {
+          "http": 401,
+        },
         "auth.token_expired": {
           "http": 401,
         },

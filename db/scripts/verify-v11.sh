@@ -231,13 +231,13 @@ expect_error "fdd_report 同期重复插入被 UNIQUE 拒绝" "duplicate key" \
   "SET ROLE thermio_api; BEGIN; SET LOCAL app.tenant_id = '${TENANT_A}'; INSERT INTO fdd_report (tenant_id, building_id, period_type, period, summary) VALUES ('${TENANT_A}'::uuid, '${BUILDING_A}'::uuid, 'day', daterange(current_date - 1, current_date), '{}'); ROLLBACK;"
 expect_count "相邻期报告插入成功（同期唯一不误伤）" 1 \
   "SET ROLE thermio_api; BEGIN; SET LOCAL app.tenant_id = '${TENANT_A}'; WITH ins AS (INSERT INTO fdd_report (tenant_id, building_id, period_type, period, summary) VALUES ('${TENANT_A}'::uuid, '${BUILDING_A}'::uuid, 'day', daterange(current_date - 2, current_date - 1), '{}') RETURNING 1) SELECT count(*) FROM ins; ROLLBACK;"
-# 把 updated_at 拨回 1 小时前（superuser），api 再 UPDATE —— 触发器应把它推回当前时刻
+# 把 updated_at 拨回 1 小时前（superuser），api 再 UPDATE —— 触发器在位时拨回即被覆写、缺失时拨回落地
 psql_exec -c "UPDATE import_row SET updated_at = now() - interval '1 hour' WHERE tenant_id = '${TENANT_A}'::uuid" \
   || { echo "FAIL: updated_at 拨回失败"; FAIL=$((FAIL + 1)); }
 expect_count "import_row touch 触发器推进 updated_at" 1 \
   "SET ROLE thermio_api; BEGIN; SET LOCAL app.tenant_id = '${TENANT_A}'; WITH upd AS (UPDATE import_row SET raw_description = 'V11复核' WHERE tenant_id = '${TENANT_A}'::uuid RETURNING updated_at) SELECT count(*) FROM upd WHERE updated_at > now() - interval '1 minute'; ROLLBACK;"
 # control_fuse touch（0004，DAT-102）：同款拨回验证——api 角色只 UPDATE 语义列（模拟
-# 评估任务/人工解除路径不带 updated_at），触发器应把行维护时间戳推回当前时刻
+# 评估任务/人工解除路径不带 updated_at），触发器在位时拨回即被覆写、缺失时拨回落地
 psql_exec -c "UPDATE control_fuse SET updated_at = now() - interval '1 hour' WHERE tenant_id = '${TENANT_A}'::uuid" \
   || { echo "FAIL: control_fuse updated_at 拨回失败"; FAIL=$((FAIL + 1)); }
 expect_count "control_fuse touch 触发器推进 updated_at（0004）" 1 \

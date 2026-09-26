@@ -10,7 +10,8 @@
 --   triggered_at / released_at —— 语义时间戳（状态机翻转时刻），应用层维护
 --     （open 态 triggered_at 必填、解除写 released_at，ddl.md §9.3）；
 --   updated_at —— 行维护时间戳，DB touch 触发器统一推进（任何 UPDATE，含纯
---     metadata 列变更），写入方无需各自携带；
+--     metadata 列变更），写入方无需各自携带；运维拨回 updated_at 须经
+--     ALTER TABLE … DISABLE TRIGGER 通道（T2 已实测该路径）；
 --   control_fuse_event.at —— 追加型事件表时间戳（该表无 updated_at，不适用 touch，
 --     「最近触发/恢复记录」以事件表 at 为准，updated_at 不承载该语义）。
 -- 前置：0001（set_updated_at 函数与 point 先例）、0003（control_fuse 建表）已执行。

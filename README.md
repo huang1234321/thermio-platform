@@ -54,8 +54,9 @@ prom-client 指标（`svc_http_request_duration_ms` / `thermio_gate_rejections_t
 `thermio_proposal_decisions_total{decision}`，§7）、kafkajs 两 topic 接线
 （`thermio.control.proposal` 生产 / `thermio.control.executed` 消费，trace_id header 纪律）。
 
-reason_code 首版种子表（17 码）与 modules/overview 设计码映射表在
-`packages/shared-types/src/reason-codes.ts`（§5.2 治理：改表 = 发版，快照钉死）。
+reason_code 首版种子表（§5.2 的 17 码 + 随模块注册的增量码）与 modules/overview
+设计码映射表在 `packages/shared-types/src/reason-codes.ts`（治理：改表 = 发版，
+快照钉死；首批增量见下节）。
 
 ```bash
 # 本地起服务（默认 :8080；/healthz 与 /metrics 在 /api/v1 前缀之外）
@@ -67,6 +68,29 @@ KAFKA_BROKERS=localhost:9092 pnpm --filter @thermio/api start
 
 # 环境变量：PORT（默认 8080）/ LOG_LEVEL（info）/ KAFKA_BROKERS（空 = kafka 停用，
 # 服务可起可测）/ KAFKA_CLIENT_ID / KAFKA_CONSUMER_GROUP_ID
+```
+
+## 遥测查询服务（IMPL-12 / DAT-115）
+
+`apps/api/src/telemetry/`：`GET /api/v1/points/{id}/latest` 与
+`GET /api/v1/points/{id}/telemetry?from&to&interval=raw|5min|1h&limit&cursor`。
+interval 路由——raw 才扫原始 hypertable，5min/1h 命中双 cagg（ddl.md §11）；
+跨度上限按粒度分档（raw 31d / 5min 730d / 1h 3650d，shared-types 常量钉死，
+env 可覆盖），游标分页 API-DSN-03。本批注册 reason_code：`point.no_data` /
+`telemetry.range_invalid` / `telemetry.store_unavailable`。
+
+api→TSDB 只读边界（DATA-MODEL §2 / ADR-005 dev 形态）：`TSDB_READ_URL` 只读
+账号（tsdb_api）+ 连接池 application_name 标注；`PG_URL`（thermio_api）+
+`PG_TENANT_ID`（RLS `app.tenant_id`，IMPL-10 会话解析落地前的显式 dev 形态）
+做点位档案判别。两者任一未配置 → 端点显式降级 503 `telemetry.store_unavailable`，
+服务本体照常起。
+
+```bash
+# 全链路自测（一次性 PG+TSDB 容器，真实迁移链与 RLS，8 断言）
+pnpm --filter @thermio/api build && apps/api/bench/selftest-real-stores.sh
+
+# 大跨度查询基准（验收要点 3，记录见 apps/api/bench/BENCH.md）
+apps/api/bench/bench-telemetry-read.sh
 ```
 
 ## 蓝本与规范

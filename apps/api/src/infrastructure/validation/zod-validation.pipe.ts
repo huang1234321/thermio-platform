@@ -1,5 +1,6 @@
 /**
- * zod 校验管道（platform.md §5.3：所有写接口入参过 zod pipe——TS-02 服务器面）。
+ * zod 校验管道（platform.md §5.3：接口入参过 zod pipe——TS-02 服务器面）。
+ * 适用于请求体、查询串与路径参数（IMPL-12 起三类入口共用）。
  *
  * 校验失败 → common.validation_failed 422，details 带字段级错误（§5.2）；
  * 管道抛 ReasonCodeException，出口形状由全局过滤器统一，不再另行包错。
@@ -28,7 +29,7 @@ export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {
     if (!result.success) {
       throw new ReasonCodeException(
         'common.validation_failed',
-        '请求体校验失败',
+        '请求参数校验失败',
         zodFieldIssues(result.error),
       );
     }

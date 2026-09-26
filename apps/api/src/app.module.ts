@@ -18,6 +18,7 @@ import {
   GateClampedInterceptor,
   ObservabilityInterceptor,
 } from './infrastructure/observability.interceptor.js';
+import { TelemetryModule } from './telemetry/telemetry.module.js';
 
 /** 全局过滤器/拦截器（执行序：中间件 → 拦截器 → 管道 → 控制器）。 */
 const GLOBAL_OBSERVABILITY: Provider[] = [
@@ -27,7 +28,7 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
 ];
 
 @Module({
-  imports: [CoreModule, KafkaModule],
+  imports: [CoreModule, KafkaModule, TelemetryModule],
   controllers: [HealthController, MetricsController],
   providers: [...GLOBAL_OBSERVABILITY],
 })

@@ -214,11 +214,22 @@ export function httpStatusForReasonCode(code: ReasonCode): number {
  * modules/overview.md 设计期大写码 → 落码小写风格的映射表（platform.md §5.2 末段、
  * implementation-plan §8 对齐事项 1：IMPL-2 做一次映射随 shared-types 入库）。
  *
- * 规则（与 §5.2 的四个机械映射示例一致）：
- * - 目标码取 `<domain>.<cause>` 小写蛇形；domain 取该码所属业务域/端点域；
- * - 目标在首版种子表内的（语义逐条对照过）：直接用种子码；
- * - 目标不在种子表内的为**草案码**：随对应模块落码时按 §5.2 治理走 PR 注册进种子表，
- *   注册前不得由服务端发出。
+ * 映射规式（§5.2 四个机械示例的一般化，DAT-102 成文；逐条定档见各组注释）：
+ * 1. 目标码取 `<domain>.<cause>` 小写蛇形；domain 取该码所属业务域/端点域；
+ * 2. **种子优先**：语义与种子表某码逐条对照一致（含**同义异名**）→ 用种子码原字。
+ *    同义双码是 API-ERR-01 稳定性事故——设计期清单码与 seed 落码不同名时，机械
+ *    直译结果（如 `PROPOSAL_GATE_SYSTEM_FUSED` → `proposal.gate_system_fused`）为
+ *    **非法码**，一律以 seed 钉死的码为准（见闸门组注释）；
+ * 3. overview §2 通用表码（无业务域归属：UNAUTHENTICATED/VALIDATION_FAILED 等）→
+ *    `common.*`（个别与域种子语义完全重合的除外，如 NOT_FOUND → asset.not_found）；
+ * 4. 域归属逐条定档：跨 building/system/equipment/point 的资源类 → `asset.*`；
+ *    枚举取值校验类 → `<枚举名小写>.unknown`（system_type/equipment_type/
+ *    quantity_type/role 各自独立域）；网关/凭证/导入/FDD/组态各自独立域；
+ * 5. 目标不在种子表内的为**草案码**：随对应模块落码时按 §5.2 治理走 PR 注册进种子表，
+ *    注册前不得由服务端发出。
+ *
+ * 快照治理（DAT-102）：全表闭集快照 + 上述定档断言见
+ * reason-code-aliases.snapshot.test.ts——改映射 = 发版动作，CI 面评审可见。
  */
 export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   // ── 通用（overview §2 通用 reason_code 表）→ 种子码 ──
@@ -233,10 +244,16 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   BUILDING_NOT_FOUND: 'asset.not_found',
   SYSTEM_NOT_FOUND: 'asset.not_found',
   POINT_NOT_FOUND: 'asset.not_found',
+  // ── 通用表其余（overview §2；无业务域归属 → common.*，规式第 3 条）草案码 ──
+  CONFLICT: 'common.version_conflict', // 乐观并发冲突（版本不符，409）；宁具体勿泛化取 version_conflict
+  RATE_LIMITED: 'common.rate_limited', // platform.md §6 容量限流节明示的骨架码原字
   // ── 闸门 → 种子码（执行结果侧展示码，overview M5；与 §5.2 逐条对照）──
   PROPOSAL_GATE_WHITELIST_DENIED: 'proposal.gate_not_whitelisted',
   PROPOSAL_GATE_RATE_LIMITED: 'proposal.gate_rate_limited',
   PROPOSAL_GATE_CONFLICT_QUEUED: 'proposal.gate_conflict',
+  // 双名收口（DAT-92 评审建议 1）：本清单码（ddl.md §9.3 / flows.md §2）与 seed
+  // `proposal.gate_circuit_open`（v1.0 既有）同义异名——机械直译
+  // `proposal.gate_system_fused` 是非法码，映射以 seed 钉死的码为准（规式第 2 条）。
   PROPOSAL_GATE_SYSTEM_FUSED: 'proposal.gate_circuit_open',
   // ── 告警域 → 种子码 ──
   ALARM_RULE_NOT_FOUND: 'alarm.rule_not_found',

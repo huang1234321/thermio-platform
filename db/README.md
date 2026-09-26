@@ -11,8 +11,9 @@
 | `scripts/create-tenant.sh` | 租户开通运维脚本（ddl.md §5.3 superuser 通道，幂等可重跑） |
 | `scripts/verify-rls.sh` | ddl.md §8 用例 2–6 脚本化复跑（RLS 隔离 / fail-closed / 角色矩阵） |
 | `scripts/verify-v11.sh` | ddl.md §9.6 用例 2–9 脚本化复跑（0002/0003 六新表：DML 状态机 / CHECK 封闭集 / 活跃唯一 / FK RESTRICT / RLS 隔离 / 最小权 / 索引 / touch 触发器） |
+| `scripts/verify-exclude.sh` | ddl.md §9.6 用例 11 脚本化复跑（0001 §4 `mv_baseline_no_active_overlap` EXCLUDE 拒绝语义，DAT-106 补录：同租户重叠 active 拒；首条 / 相邻 / 重叠 draft / 跨租户 / retired 换代放行，6 断言） |
 
-CI：`.github/workflows/db-migration-smoke.yml`（compose 外的一次性干净 PG 容器上跑 goose up/down 往返（25 表断言）+ RLS 验证 + §9.6 增量用例 + 租户幂等）。
+CI：`.github/workflows/db-migration-smoke.yml`（compose 外的一次性干净 PG 容器上跑 goose up/down 往返（25 表断言）+ RLS 验证 + §9.6 增量用例 + EXCLUDE 拒绝语义（§9.6 用例 11）+ 租户幂等）。
 
 ## 执行顺序契约（ddl.md §1）
 
@@ -67,9 +68,10 @@ goose -dir db/migrations/pg postgres \
 goose -dir db/migrations/pg postgres \
   "postgres://postgres:postgres@127.0.0.1:55432/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
 
-# 3) RLS 验证 + §9.6 增量用例 + 租户开通幂等（容器内 psql，socket trust 通道）
+# 3) RLS 验证 + §9.6 增量用例 + EXCLUDE 拒绝语义 + 租户开通幂等（容器内 psql，socket trust 通道）
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/verify-rls.sh
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/verify-v11.sh
+docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/verify-exclude.sh
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/create-tenant.sh -- \
   --slug demo --name "演示租户" --admin-email admin@demo.local --admin-password-hash '(argon2id/bcrypt 串)'
 docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio thermio-smoke-pg bash -s < db/scripts/create-tenant.sh -- \

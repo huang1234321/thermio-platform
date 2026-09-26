@@ -86,6 +86,11 @@ jobs:
           docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
             bash -s < db/scripts/verify-v11.sh
 
+      - name: EXCLUDE 拒绝语义验证（ddl.md §9.6 用例 11，0001 约束，DAT-106 补录）
+        run: |
+          docker exec -i -e PGUSER=postgres -e PGDATABASE=thermio "$PG_CONTAINER" \
+            bash -s < db/scripts/verify-exclude.sh
+
       - name: 租户开通幂等（执行两次结果一致）
         run: |
           HASH='$argon2id$v=19$m=65536,t=3,p=1$c21vbGVzYWx0$Zm9vYmFy'  # 冒烟占位哈希，非真实口令

@@ -165,9 +165,15 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
       const res = await request(app.getHttpServer())
         .post('/api/v1/probe/proposals')
         .set('Content-Type', 'application/json')
+        .set('x-request-id', 'req_broken_json')
         .send('{"broken": json')
         .expect(422);
       expect(res.body.error.reason_code).toBe('common.validation_failed');
+      // QA 阻塞#2 防回归：解析错误路径上下文已先于 body-parser 建立——
+      // request_id 头体同值且透传上游（API-ERR-06 / OBS-MT-03），trace 头同在。
+      expect(res.body.error.request_id).toBe('req_broken_json');
+      expect(res.headers['x-request-id']).toBe('req_broken_json');
+      expect(res.headers['x-trace-id']).toMatch(/^trc_/);
     });
   });
 

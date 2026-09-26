@@ -4,8 +4,10 @@
  *
  * DI 纪律：所有构造注入显式 @Inject(token)——vitest/esbuild 不发射 design:paramtypes，
  * 显式 token 让测试环境与运行时同一套解析路径。
+ * 请求上下文中间件不在本模块（Nest 模块中间件执行序在 body-parser 之后），
+ * 由 bootstrap.configureApp 以 app.use 先行挂载（QA 阻塞#2 修复）。
  */
-import { Module, type MiddlewareConsumer, type NestModule, type Provider } from '@nestjs/common';
+import { Module, type Provider } from '@nestjs/common';
 import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { HealthController } from './health/health.controller.js';
 import { HttpExceptionFilter } from './infrastructure/errors/http-exception.filter.js';
@@ -16,7 +18,6 @@ import {
   GateClampedInterceptor,
   ObservabilityInterceptor,
 } from './infrastructure/observability.interceptor.js';
-import { RequestContextMenu } from './infrastructure/request-context.middleware.js';
 
 /** 全局过滤器/拦截器（执行序：中间件 → 拦截器 → 管道 → 控制器）。 */
 const GLOBAL_OBSERVABILITY: Provider[] = [
@@ -30,8 +31,4 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
   controllers: [HealthController, MetricsController],
   providers: [...GLOBAL_OBSERVABILITY],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer): void {
-    consumer.apply(RequestContextMenu).forRoutes('*');
-  }
-}
+export class AppModule {}

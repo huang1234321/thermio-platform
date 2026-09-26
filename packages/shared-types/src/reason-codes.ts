@@ -42,6 +42,10 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * 首批注册（IMPL-12 / DAT-115，遥测查询服务落码，§5.2 治理走本 PR）：
  * point.no_data / telemetry.range_invalid / telemetry.store_unavailable——
  * 目标码与 OVERVIEW_DESIGN_CODE_ALIASES 映射（IMPL-2 预留）逐字一致。
+ *
+ * 二批注册（IMPL-7 / DAT-110，EMQX 内部端点服务认证，platform.md §11-2）：
+ * auth.service_unauthorized——OVERVIEW_DESIGN_CODE_ALIASES 的 SERVICE_UNAUTHORIZED
+ * 草案映射自此指向种子码。
  */
 export const REASON_CODES = [
   'common.validation_failed',
@@ -49,6 +53,7 @@ export const REASON_CODES = [
   'auth.invalid_credentials',
   'auth.token_expired',
   'auth.forbidden',
+  'auth.service_unauthorized',
   'asset.not_found',
   'asset.duplicate_raw_name',
   'point.not_controllable',
@@ -104,6 +109,11 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'auth',
     http: 403,
     description: '已认证但权限不足',
+  },
+  'auth.service_unauthorized': {
+    domain: 'auth',
+    http: 401,
+    description: '内部端点服务凭证校验失败（platform.md §11-2：不泄露具体失败步骤，API-ERR-04）',
   },
   'asset.not_found': {
     domain: 'asset',
@@ -230,7 +240,8 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   PROPOSAL_GATE_SYSTEM_FUSED: 'proposal.gate_circuit_open',
   // ── 告警域 → 种子码 ──
   ALARM_RULE_NOT_FOUND: 'alarm.rule_not_found',
-  // ── platform.md §5.2 明示的四个机械映射（目标为草案码，随模块落码注册）──
+  // ── platform.md §5.2 明示的四个机械映射（目标为草案码，随模块落码注册；
+  //    auth.service_unauthorized 已随 IMPL-7 内部端点注册进种子表）──
   PROPOSAL_STATE_INVALID: 'proposal.state_invalid',
   IMPORT_FILE_INVALID: 'import.file_invalid',
   STREAM_LIMIT_EXCEEDED: 'stream.limit_exceeded',

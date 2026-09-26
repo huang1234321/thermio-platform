@@ -15,10 +15,15 @@ import {
   type ControlResult,
   type GateCause,
 } from '@thermio/shared-types';
+import { OFFLINE_ALARM_REASONS, type OfflineAlarmReason } from '../../internal-mqtt/contract.js';
 
 export const HTTP_DURATION_METRIC = 'svc_http_request_duration_ms';
 export const GATE_REJECTIONS_METRIC = 'thermio_gate_rejections_total';
 export const PROPOSAL_DECISIONS_METRIC = 'thermio_proposal_decisions_total';
+export const MQTT_AUTH_METRIC = 'svc_mqtt_auth_total';
+export const MQTT_EVENTS_METRIC = 'svc_mqtt_events_total';
+export const MQTT_OFFLINE_SIGNALS_METRIC = 'svc_mqtt_offline_signals_total';
+export const MQTT_RECONCILE_CYCLES_METRIC = 'svc_mqtt_reconcile_cycles_total';
 
 /** 直方图桶（ms）：单楼私有化低流量形态，覆盖 5ms–10s（ADR-017 api HTTP P99 观测窗）。 */
 const HTTP_DURATION_BUCKETS_MS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
@@ -49,6 +54,35 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // ── EMQX 内部端点指标（emqx.md §10 观测面同源，IMPL-7）──
+  private readonly mqttAuthTotal = new Counter({
+    name: MQTT_AUTH_METRIC,
+    help: 'EMQX 设备认证结果计数（emqx.md §3；result=allow|deny）',
+    labelNames: ['result'],
+    registers: [this.registry],
+  });
+
+  private readonly mqttEventsTotal = new Counter({
+    name: MQTT_EVENTS_METRIC,
+    help: 'EMQX 上下线事件处理结果计数（emqx.md §5.2；单调卫语句吸收的旧事件单独可见）',
+    labelNames: ['outcome'],
+    registers: [this.registry],
+  });
+
+  private readonly mqttOfflineSignalsTotal = new Counter({
+    name: MQTT_OFFLINE_SIGNALS_METRIC,
+    help: '网关离线信号计数（emqx.md §5.2-3；IMPL-13 告警联动的留痕面，label 为触发 reason 闭集）',
+    labelNames: ['reason'],
+    registers: [this.registry],
+  });
+
+  private readonly mqttReconcileCyclesTotal = new Counter({
+    name: MQTT_RECONCILE_CYCLES_METRIC,
+    help: '对账循环计数（emqx.md §5.3；outcome=completed|failed）',
+    labelNames: ['outcome'],
+    registers: [this.registry],
+  });
+
   constructor() {
     // 预热 label 取值：Counter 的 label 组合在首次 inc 前不进输出——显式 inc(0)
     // 让 /metrics 从第一刻起就暴露五闸门/四结果全维度零值，PromQL 不因「尚未发生」缺序列。
@@ -57,6 +91,18 @@ export class MetricsService {
     }
     for (const decision of CONTROL_RESULTS) {
       this.proposalDecisionsTotal.labels({ decision }).inc(0);
+    }
+    for (const result of ['allow', 'deny'] as const) {
+      this.mqttAuthTotal.labels({ result }).inc(0);
+    }
+    for (const outcome of ['applied', 'stale_ignored', 'unknown_client_ignored'] as const) {
+      this.mqttEventsTotal.labels({ outcome }).inc(0);
+    }
+    for (const reason of OFFLINE_ALARM_REASONS) {
+      this.mqttOfflineSignalsTotal.labels({ reason }).inc(0);
+    }
+    for (const outcome of ['completed', 'failed'] as const) {
+      this.mqttReconcileCyclesTotal.labels({ outcome }).inc(0);
     }
   }
 
@@ -72,6 +118,22 @@ export class MetricsService {
 
   recordDecision(decision: ControlResult): void {
     this.proposalDecisionsTotal.labels({ decision }).inc();
+  }
+
+  recordMqttAuth(result: 'allow' | 'deny'): void {
+    this.mqttAuthTotal.labels({ result }).inc();
+  }
+
+  recordMqttEvent(outcome: 'applied' | 'stale_ignored' | 'unknown_client_ignored'): void {
+    this.mqttEventsTotal.labels({ outcome }).inc();
+  }
+
+  recordMqttOfflineSignal(reason: OfflineAlarmReason): void {
+    this.mqttOfflineSignalsTotal.labels({ reason }).inc();
+  }
+
+  recordMqttReconcileCycle(outcome: 'completed' | 'failed'): void {
+    this.mqttReconcileCyclesTotal.labels({ outcome }).inc();
   }
 
   /** Prometheus 文本格式暴露（registry.metrics() 为 async）。 */

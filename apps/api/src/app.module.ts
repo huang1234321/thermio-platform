@@ -12,6 +12,7 @@ import { APP_FILTER, APP_INTERCEPTOR } from '@nestjs/core';
 import { HealthController } from './health/health.controller.js';
 import { HttpExceptionFilter } from './infrastructure/errors/http-exception.filter.js';
 import { CoreModule } from './infrastructure/core.module.js';
+import { InternalMqttModule } from './internal-mqtt/internal-mqtt.module.js';
 import { KafkaModule } from './infrastructure/kafka/kafka.module.js';
 import { MetricsController } from './infrastructure/metrics/metrics.controller.js';
 import {
@@ -28,7 +29,7 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
 ];
 
 @Module({
-  imports: [CoreModule, KafkaModule, TelemetryModule],
+  imports: [CoreModule, KafkaModule, TelemetryModule, InternalMqttModule],
   controllers: [HealthController, MetricsController],
   providers: [...GLOBAL_OBSERVABILITY],
 })

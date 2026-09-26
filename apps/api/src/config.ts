@@ -55,6 +55,29 @@ const AppConfigSchema = z.object({
     .int()
     .positive()
     .default(TELEMETRY_SPAN_LIMIT_DAYS['1h']),
+  // ── EMQX 内部端点（emqx.md §3/§5/§7，IMPL-7）──
+  /** Bearer 服务凭证（platform.md §11：EMQX_INTERNAL_TOKEN = SVC_TOKEN_EMQX 同一枚）。 */
+  EMQX_INTERNAL_TOKEN: z.string().default(''),
+  /** 轮换双读窗口内的旧 token（SEC-KEY-04；空 = 无轮换进行中）。 */
+  EMQX_INTERNAL_TOKEN_PREVIOUS: z.string().default(''),
+  AUTH_DB_HOST: z.string().min(1).default('localhost'),
+  AUTH_DB_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
+  AUTH_DB_NAME: z.string().min(1).default('thermio'),
+  AUTH_DB_USER: z.string().min(1).default('thermio_auth'),
+  AUTH_DB_PASSWORD: z.string().default(''),
+  PLATFORM_DB_HOST: z.string().min(1).default('localhost'),
+  PLATFORM_DB_PORT: z.coerce.number().int().min(1).max(65535).default(5432),
+  PLATFORM_DB_NAME: z.string().min(1).default('thermio'),
+  PLATFORM_DB_USER: z.string().min(1).default('thermio_api'),
+  PLATFORM_DB_PASSWORD: z.string().default(''),
+  /** EMQX 管理 API（§5.3 对账；空 = 对账停用，dev 栈内置认证形态）。 */
+  EMQX_MANAGEMENT_BASE_URL: z.string().default(''),
+  EMQX_MANAGEMENT_API_KEY: z.string().default(''),
+  EMQX_MANAGEMENT_API_SECRET: z.string().default(''),
+  EMQX_MANAGEMENT_TIMEOUT_MS: z.coerce.number().int().min(100).default(3_000),
+  EMQX_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(1_000).default(60_000),
+  MQTT_AUTH_FAIL_LIMIT: z.coerce.number().int().min(1).default(10),
+  MQTT_AUTH_FAIL_WINDOW_MS: z.coerce.number().int().min(1_000).default(300_000),
 });
 
 export interface AppConfig extends z.infer<typeof AppConfigSchema> {
@@ -66,6 +89,8 @@ export interface AppConfig extends z.infer<typeof AppConfigSchema> {
   readonly pgLookupEnabled: boolean;
   /** 按 interval 分档的跨度上限（天）。 */
   readonly telemetrySpanLimitDays: Readonly<Record<TelemetryInterval, number>>;
+  /** 对账是否启用（EMQX_MANAGEMENT_BASE_URL 非空）。 */
+  readonly emqxReconcileEnabled: boolean;
 }
 
 /** 解析并校验环境变量；畸形值直接失败快（启动期报错优于运行期漂移）。 */
@@ -90,5 +115,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       '5min': parsed.TELEMETRY_5MIN_SPAN_MAX_DAYS,
       '1h': parsed.TELEMETRY_1H_SPAN_MAX_DAYS,
     },
+    emqxReconcileEnabled: parsed.EMQX_MANAGEMENT_BASE_URL.length > 0,
   };
 }

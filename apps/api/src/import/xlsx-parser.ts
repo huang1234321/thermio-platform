@@ -16,6 +16,7 @@ import {
   IMPORT_TOLERANT_DIRECTIONS,
   type ImportFailure,
 } from '@thermio/shared-types';
+import ExcelJS from 'exceljs';
 
 /** 列头别名表（§5.1：canonical + 别名，trim + 全半角空格归一后匹配）。 */
 const COLUMN_ALIASES: ReadonlyArray<{
@@ -97,10 +98,17 @@ function cellText(value: unknown): string | null {
   return null; // 日期等复杂对象：模板列语义不承载，置空走「未标注」
 }
 
-/** 解析入口（异步段）。任何 exceljs 抛错 → sheet_corrupt（工作表不可读/公式异常）。 */
+/**
+ * 解析入口（异步段）。任何 exceljs 抛错 → sheet_corrupt（工作表不可读/公式异常）。
+ *
+ * **静态默认导入（QA 阻塞 #1 修复）**：exceljs@4 为 CJS 且 `module.exports = <变量>`
+ * ——Node ESM 动态 import 的命名空间只有 default（cjs-module-lexer 不识别变量属性
+ * 作命名导出），`namespace.Workbook` 在编译产物（dist）运行时为 undefined（vitest
+ * 的 CJS interop 会合成命名导出，故测试面探测不到）。default 即 module.exports
+ * 对象，`.Workbook` 恒可用。
+ */
 export async function parsePointTable(buffer: Buffer): Promise<ParseOutcome> {
-  const ExcelJS = await import('exceljs');
-  let workbook: import('exceljs').Workbook;
+  let workbook: InstanceType<typeof ExcelJS.Workbook>;
   try {
     workbook = new ExcelJS.Workbook();
     // 5 MB / 5,000 行的量级下全量读入安全（platform §12 容量上限即输入上限）

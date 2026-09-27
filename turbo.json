@@ -12,7 +12,20 @@
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "env": [
+        "PG_E2E_ADMIN_URL",
+        "PG_E2E_API_URL",
+        "PG_E2E_AUTH_URL",
+        "AUTH_JWT_SECRET",
+        "AUTH_LOGIN_RATE_LIMIT",
+        "PG_API_URL",
+        "PG_AUTH_URL",
+        "PG_URL",
+        "TSDB_READ_URL",
+        "KAFKA_BROKERS",
+        "LOG_LEVEL"
+      ]
     }
   }
 }

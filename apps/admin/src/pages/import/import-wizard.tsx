@@ -319,6 +319,10 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
       });
       setDryReport(report);
       await loadJob(job.id);
+      // 行级 issues 服务端全量重算（§7）——刷新客户端 rows 供阻塞态就地明细渲染（V1）
+      if (!report.passed) {
+        await loadRows(job.id);
+      }
       if (report.passed) {
         void message.success('dry-run 通过：阻塞 0，可执行 apply');
       } else {
@@ -411,7 +415,7 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
           导入向导 · {job.id.slice(0, 8)}
         </Typography.Title>
         <Card>
-          <Space direction="vertical">
+          <Space direction="vertical" size="middle" style={{ width: '100%' }}>
             <Space>
               <JobStatusTag status={job.status} />
               <Typography.Text type="secondary">{job.file_name}</Typography.Text>
@@ -595,72 +599,89 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
                   ▶ 执行自动映射（规则 + 历史模板库）
                 </Button>
                 <Typography.Text type="secondary">
-                  自动映射 {job?.mapped_count ?? 0}/{job?.row_count ?? 0} · 待人工 $
+                  自动映射 {String(job?.mapped_count ?? 0)}/{String(job?.row_count ?? 0)} · 待人工{' '}
                   {String(unmappedRows.length)} 行（先自动后人工，UC-M2-2；枚举只从清单选择）
                 </Typography.Text>
               </Space>
-              <Table<ImportRow>
-                rowKey="id"
-                size="small"
-                loading={rowsLoading}
-                dataSource={unmappedRows}
-                pagination={{ pageSize: 20 }}
-                columns={[
-                  { title: '#', dataIndex: 'row_no', width: 60, render: excelRow },
-                  {
-                    title: '原始点号/描述',
-                    render: (_, row) => (
-                      <Space direction="vertical" size={0}>
-                        <Typography.Text strong>{row.raw_name}</Typography.Text>
-                        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                          {row.raw_description ?? ''}
-                        </Typography.Text>
-                      </Space>
-                    ),
-                  },
-                  {
-                    title: '建议',
-                    render: (_, row) =>
-                      row.suggestions.length === 0 ? (
-                        <Typography.Text type="secondary">—</Typography.Text>
-                      ) : (
-                        <Space wrap>
-                          {row.suggestions.map((s, i) => (
-                            <Button
-                              key={i}
-                              size="small"
-                              onClick={() => {
-                                void patchRow(row, {
-                                  equipment_id: s.equipment_id,
-                                  quantity_type: s.quantity_type,
-                                  unit_std: s.unit_std,
-                                });
-                              }}
-                            >
-                              {s.source === 'history_exact' ? '历史精确' : '历史相似'}
-                              {s.quantity_type ?? ''}（{s.score}）
-                            </Button>
-                          ))}
+              {job !== null &&
+                job.row_count > 0 &&
+                job.mapped_count === job.row_count &&
+                unmappedRows.length === 0 && (
+                  <Alert
+                    type="success"
+                    showIcon
+                    message={`已全部映射 ✓（${String(job.mapped_count)}/${String(job.row_count)} 行）——进入「单位换算确认」→ dry-run`}
+                    description={
+                      <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                        已映射行的 issues（如 P2-3 阻塞）在 dry-run 后的执行步明细中逐行列出
+                      </Typography.Text>
+                    }
+                  />
+                )}
+              {unmappedRows.length > 0 && (
+                <Table<ImportRow>
+                  rowKey="id"
+                  size="small"
+                  loading={rowsLoading}
+                  dataSource={unmappedRows}
+                  pagination={{ pageSize: 20 }}
+                  columns={[
+                    { title: '#', dataIndex: 'row_no', width: 60, render: excelRow },
+                    {
+                      title: '原始点号/描述',
+                      render: (_, row) => (
+                        <Space direction="vertical" size={0}>
+                          <Typography.Text strong>{row.raw_name}</Typography.Text>
+                          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                            {row.raw_description ?? ''}
+                          </Typography.Text>
                         </Space>
                       ),
-                  },
-                  {
-                    title: '操作',
-                    width: 120,
-                    render: (_, row) =>
-                      canWrite ? (
-                        <Button
-                          size="small"
-                          onClick={() => {
-                            setMappingTarget(row);
-                          }}
-                        >
-                          人工映射…
-                        </Button>
-                      ) : null,
-                  },
-                ]}
-              />
+                    },
+                    {
+                      title: '建议',
+                      render: (_, row) =>
+                        row.suggestions.length === 0 ? (
+                          <Typography.Text type="secondary">—</Typography.Text>
+                        ) : (
+                          <Space wrap>
+                            {row.suggestions.map((s, i) => (
+                              <Button
+                                key={i}
+                                size="small"
+                                onClick={() => {
+                                  void patchRow(row, {
+                                    equipment_id: s.equipment_id,
+                                    quantity_type: s.quantity_type,
+                                    unit_std: s.unit_std,
+                                  });
+                                }}
+                              >
+                                {s.source === 'history_exact' ? '历史精确' : '历史相似'}
+                                {s.quantity_type ?? ''}（{s.score}）
+                              </Button>
+                            ))}
+                          </Space>
+                        ),
+                    },
+                    {
+                      title: '操作',
+                      width: 120,
+                      render: (_, row) =>
+                        canWrite ? (
+                          <Button
+                            size="small"
+                            onClick={() => {
+                              setMappingTarget(row);
+                            }}
+                          >
+                            人工映射…
+                          </Button>
+                        ) : null,
+                    },
+                  ]}
+                />
+              )}
               {unmappedRows.length > 0 && (
                 <Alert
                   type="warning"
@@ -758,16 +779,44 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
                   <Typography.Text type="secondary">阻塞项清零前 apply 不可用</Typography.Text>
                 </Space>
               )}
+              {dryReport === null && (job?.status === 'applied' || job?.status === 'checked') && (
+                <Alert
+                  type="success"
+                  showIcon
+                  message={
+                    job.status === 'applied'
+                      ? 'dry-run 已通过 · 点位已登记（applied）——下方发起采集自检'
+                      : 'dry-run 已通过 · 点位已登记 · 自检报告已生成（checked）——可重跑自检刷新命中率'
+                  }
+                />
+              )}
               {dryReport !== null && !dryReport.passed && (
                 <Alert
                   type="error"
                   showIcon
-                  message={`⛔ 阻塞项 ${String(dryReport.blocking_count)}：apply 被拒绝`}
+                  message={`⛔ 阻塞项 ${String(dryReport.blocking_count)} · 警告 ${String(dryReport.warning_count)}：apply 被拒绝`}
                   description={
-                    <Space direction="vertical">
-                      <Typography.Text type="secondary">
-                        行级明细见「重新校验」后刷新的映射工作台（GET rows?issue=*）
-                      </Typography.Text>
+                    <Space direction="vertical" size="small" style={{ width: '100%' }}>
+                      {/* V1：就地行级明细（code + Excel 行号 + 点名，§7 修复路径随行给出） */}
+                      {rows
+                        .filter((row) => row.issues.length > 0)
+                        .map((row) =>
+                          row.issues.map((issue) => (
+                            <Typography.Text
+                              key={`${String(row.id)}-${issue.code}`}
+                              type={issue.blocking ? 'danger' : 'warning'}
+                              style={{ fontSize: 12 }}
+                            >
+                              第 {String(excelRow(row.row_no))} 行 {row.raw_name} ·{' '}
+                              {issue.blocking ? '阻塞' : '警告'} {issue.code}
+                            </Typography.Text>
+                          )),
+                        )}
+                      {dryReport.job_issues.map((issue) => (
+                        <Typography.Text key={issue.code} type="warning" style={{ fontSize: 12 }}>
+                          作业级 · 警告 {issue.code}
+                        </Typography.Text>
+                      ))}
                       <Button
                         onClick={() => {
                           void runDryRun();

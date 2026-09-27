@@ -109,12 +109,13 @@ export function ImportsListPage(): React.ReactNode {
               {
                 title: '状态',
                 dataIndex: 'status',
-                width: 110,
+                width: 150,
                 render: (s: ImportJobStatus, job) => (
                   <Space direction="vertical" size={0}>
                     <JobStatusTag status={s} />
                     {job.failure !== null && (
-                      <Typography.Text type="danger" style={{ fontSize: 12 }}>
+                      // V5：机器码不断词（word-break 会把 template_mismatch 断成 misma/tch）
+                      <Typography.Text type="danger" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
                         {job.failure.code}
                       </Typography.Text>
                     )}

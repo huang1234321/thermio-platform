@@ -30,7 +30,10 @@ describe('reason_code registry', () => {
     // refresh_revoked、user.* 四码、role.unknown）
     // + IMPL-11 十一码（DAT-114，M1-asset §1.2 落码值：common.conflict、
     // asset. 枚举/重复四码、point. 两码、gateway. 两码、credential. 两码）。
-    expect(REASON_CODES).toHaveLength(41);
+    // + IMPL-13 八码（DAT-116，M4-alarm.md §1.2：alarm.not_found / state_invalid /
+    //   suppress_duration_invalid / rule_scope_invalid / rule_params_invalid /
+    //   rule_type_unknown / severity_unknown / rule_in_use）。
+    expect(REASON_CODES).toHaveLength(49);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

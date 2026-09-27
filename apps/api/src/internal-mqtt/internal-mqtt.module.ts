@@ -85,5 +85,8 @@ const INTERNAL_MQTT_PROVIDERS: Provider[] = [
   imports: [CoreModule],
   controllers: [MqttInternalController],
   providers: [...INTERNAL_MQTT_PROVIDERS],
+  // IMPL-13 接通（M4-alarm.md §5.1 通道①②）：告警引擎复用 AUTH_DB 旁路读
+  // （质量事件 gateway_id → tenant 解析）并经 GatewayStatusService 注册离线信号 sink
+  exports: [AUTH_DB, GatewayStatusService],
 })
 export class InternalMqttModule {}

@@ -26,7 +26,7 @@ import {
   Upload,
   message,
 } from 'antd';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import type { UploadFile } from 'antd';
 import {
@@ -104,6 +104,14 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
   // 步骤 5 状态
   const [dryReport, setDryReport] = useState<DryRunReport | null>(null);
   const [selfReport, setSelfReport] = useState<SelfCheckReport | null>(null);
+  /** 自检真实 in-flight 标志（QA 阻塞 #2：loading 绑作业状态会把 applied 休息态锁死按钮）。 */
+  const [selfCheckPending, setSelfCheckPending] = useState(false);
+  /** 自检派发时点的 checked_at 锚（首轮 null；完成信号 = checked_at 前进，checked→checked 重跑同判）。 */
+  const selfCheckDispatchedAt = useRef<string | null>(null);
+  /** 派发时刻（ms）：卡死守卫——服务端内部失败不产生状态跳变时解除按钮锁（重试安全：单飞幂等）。 */
+  const selfCheckDispatchedMs = useRef(0);
+  /** 报告已取的 checked_at（防轮询重复拉取）。 */
+  const reportLoadedFor = useRef<string | null>(null);
 
   const loadJob = useCallback(async (id: string): Promise<ImportJob | null> => {
     try {
@@ -173,12 +181,8 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
       setStep(stepForStatus(loaded));
       if (loaded.row_count > 0) await loadRows(jobId);
       await loadEquipments(loaded.building_id);
-      if (loaded.status === 'checked') {
-        try {
-          setSelfReport(await apiFetch(`/imports/${jobId}/self-check`, SelfCheckReportSchema));
-        } catch {
-          /* 报告未就绪不阻断向导呈现 */
-        }
+      if (loaded.status === 'checked' && loaded.checked_at !== null) {
+        await loadSelfReport(jobId, loaded.checked_at);
       }
     })();
   }, [jobId, loadJob, loadRows, loadEquipments]);
@@ -200,6 +204,29 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
         }
         if (fresh.row_count > 0 && rows.length === 0 && fresh.status !== 'failed') {
           void loadRows(fresh.id);
+        }
+        // 自检完成信号（§4.3 状态跳变 + 摘要字段）：checked_at 前进 → 清 pending、拉报告
+        if (fresh.status === 'failed') {
+          setSelfCheckPending(false);
+          return;
+        }
+        if (fresh.status === 'checked' && fresh.checked_at !== null) {
+          if (selfCheckPending && fresh.checked_at !== selfCheckDispatchedAt.current) {
+            setSelfCheckPending(false);
+          }
+          void loadSelfReport(fresh.id, fresh.checked_at);
+          return;
+        }
+        // 卡死守卫：pending 超 5 min 无状态跳变（服务端统计失败不迁移作业态）→ 解锁可重试
+        if (
+          selfCheckPending &&
+          fresh.status === 'applied' &&
+          Date.now() - selfCheckDispatchedMs.current > 5 * 60 * 1000
+        ) {
+          setSelfCheckPending(false);
+          void message.warning(
+            '自检长时间未返回，已解除按钮锁——可重试（服务端单飞幂等，不会并发两轮）',
+          );
         }
       });
     },
@@ -330,8 +357,23 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
     }
   }
 
+  /** 报告拉取（§3.10 GET 实时计算口径；按 checked_at 去重防轮询重复拉取）。 */
+  async function loadSelfReport(jobId: string, checkedAt: string): Promise<void> {
+    if (reportLoadedFor.current === checkedAt) return;
+    try {
+      const report = await apiFetch(`/imports/${jobId}/self-check`, SelfCheckReportSchema);
+      reportLoadedFor.current = checkedAt;
+      setSelfReport(report);
+    } catch {
+      /* checked 态下报告必在；瞬时失败由下轮 checked_at 变化或重跑再拉 */
+    }
+  }
+
   async function runSelfCheck(): Promise<void> {
-    if (job === null) return;
+    if (job === null || selfCheckPending) return;
+    selfCheckDispatchedAt.current = job.checked_at; // 完成信号锚（首轮 null → 非空；重跑 → 前进）
+    selfCheckDispatchedMs.current = Date.now();
+    setSelfCheckPending(true);
     try {
       await apiFetch(`/imports/${job.id}/self-check`, ImportJobSchema, {
         method: 'POST',
@@ -340,6 +382,7 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
       void message.success('自检已发起（202）：读指令下发 → 采集窗等待 → 统计中…');
       await loadJob(job.id);
     } catch (cause) {
+      setSelfCheckPending(false); // 受理失败即可重试（服务端单飞幂等 202，不冲突）
       void message.error(errorText(cause, '自检发起失败'));
     }
   }
@@ -760,7 +803,7 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
                   <Button
                     type="primary"
                     disabled={!canWrite}
-                    loading={job.status === 'applied'}
+                    loading={selfCheckPending}
                     onClick={() => {
                       void runSelfCheck();
                     }}

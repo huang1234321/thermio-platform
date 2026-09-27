@@ -392,6 +392,15 @@ skipped('import e2e：五步向导全流程（IMPL-15 验收要点）', { timeou
       expect(job.body.issue_count).toBe(
         Number(report.blocking_count) + Number(report.warning_count),
       );
+      // 写点警告位显式断言（验收建议）：TANK_LVL_SET（写点）→ write_point_clamp_pending
+      const clampRows = await authed(
+        'get',
+        `/api/v1/imports/${jobId}/rows?issue=write_point_clamp_pending`,
+        operatorToken,
+      );
+      const clampItems = clampRows.body.items as Array<{ raw_name: string }>;
+      expect(clampItems.length).toBe(1);
+      expect(clampItems[0]?.raw_name).toBe('TANK_LVL_SET');
     });
 
     it('shouldRejectApply_withoutIdempotencyKey', async () => {
@@ -580,6 +589,36 @@ skipped('import e2e：五步向导全流程（IMPL-15 验收要点）', { timeou
       expect(job.body.status).toBe('mapping'); // 停留
     });
 
+    it('shouldKeepIssueCountAtRowLevelScope_whenJobLevelWarningsPresent（验收 F2）', async () => {
+      // 场景：1 行未映射（行级阻塞）+ 网关离线（作业级警告 gateway_offline）
+      // ——R12 口径：issue_count = 阻塞 + 警告（行级），作业级只入报告不计入；
+      // 旧实现每含一个作业级问题少算 1，本断言钉死该回归。
+      const jobId = await uploadWorkbook(buildXlsx(['点号', '描述'], [['Mystery_2', '未知量']]));
+      await pollJob(operatorToken, jobId, (j) => j.row_count > 0);
+      await authed('post', `/api/v1/imports/${jobId}/mapping/auto`, operatorToken).send({});
+      await pollJob(operatorToken, jobId, (j) => j.mapped_count >= 0 && j.status === 'mapping');
+      const admin = new pg.Pool({ connectionString: E2E_ADMIN_URL, max: 1 });
+      await admin.query(`UPDATE gateway SET status = 'offline' WHERE id = $1`, [seed.gatewayId]);
+      try {
+        const dry = await authed('post', `/api/v1/imports/${jobId}/dry-run`, operatorToken);
+        expect(dry.status).toBe(200);
+        expect(dry.body.passed).toBe(false);
+        expect(dry.body.blocking_count).toBe(1); // row_unmapped
+        expect((dry.body.job_issues as Array<{ code: string }>).map((i) => i.code)).toEqual([
+          'gateway_offline',
+        ]);
+        const job = await authed('get', `/api/v1/imports/${jobId}`, operatorToken);
+        // 行级口径：1（阻塞）+ 0（行级警告）= 1——不含 gateway_offline
+        expect(job.body.issue_count).toBe(
+          Number(dry.body.blocking_count) + Number(dry.body.warning_count),
+        );
+        expect(job.body.issue_count).toBe(1);
+      } finally {
+        await admin.query(`UPDATE gateway SET status = 'online' WHERE id = $1`, [seed.gatewayId]);
+        await admin.end();
+      }
+    });
+
     it('shouldBlockDryRun_onWritePointWithEnumQuantity_p23', async () => {
       const jobId = await uploadWorkbook(
         buildXlsx(
@@ -641,6 +680,8 @@ skipped('import e2e：五步向导全流程（IMPL-15 验收要点）', { timeou
       const job = await pollJob(operatorToken, jobId, (j) => j.status === 'failed');
       expect(job.failure).toMatchObject({ stage: 'apply_push', code: 'gateway_ack_partial' });
       expect((job.failure?.rows ?? []).map((r) => r.raw_name)).toEqual(['ACK_P_1']);
+      // F4：失败行 row_no 回填（本作业 import_row join，非 0 占位）
+      expect(job.failure?.rows?.[0]?.row_no).toBe(1);
       const admin = new pg.Pool({ connectionString: E2E_ADMIN_URL, max: 1 });
       const kept = await admin.query<{ count: string }>(
         `SELECT count(*) AS count FROM point WHERE tenant_id = $1 AND gateway_id = $2 AND raw_name = 'ACK_P_1'`,

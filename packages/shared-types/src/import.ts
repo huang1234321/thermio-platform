@@ -195,36 +195,56 @@ export interface UnitConversionEntry {
 }
 
 /**
- * 单位族清单（ingest.md §5 为内容源；本表 = canonical 形状）：
- * - 温度族为 affine（degF→degC 含偏移，预览必须展示公式而非单因子）；
- * - identity = scale 1 / offset 0 的直通对（供确认页展示「不换算」语义）；
+ * 单位转换表 v1（**内容源 = ingest.md §5.2 单位族清单**，双栈同一对集纪律——TS/Go
+ * 两侧接受同一对集，变更走 PR + 双侧快照测试）：
+ * - 温度 `degC/degF/K`（affine：degF→degC / K→degC 含偏移，预览必须展示公式）；
+ * - 压力 `kPa/Pa/bar/psi/mmH2O` → kPa（linear；1 psi = 6.894757293168361 kPa、
+ *   1 mmH2O = 9.80665 Pa，NIST/4℃ 水柱口径）；
+ * - 功率 `kW/W/MW` → kW；能量 `kWh/Wh` → kWh；流量 `m³/h / L/s` → m³/h；
+ * - `%/Hz/V/A/rpm` 等恒等族（§5.2「等恒等族」开放列举，identity 直通）；
+ * - identity = scale 1 / offset 0 的直通对（确认页「不换算」语义）；
  * - 任一侧为空 = 直通语义（不查本表，ingest 视为已归一）。
+ *
+ * **与 ingest §5.2 清单的显式差异（display 别名，仅此一组、有保留理由）**：
+ * `℃/°C → degC`、`°F → degC`、`m3/h → m³/h`、`l/s → m³/h`——现场点表原文使用
+ * 显示形/ASCII 单位（中文 Excel 惯例，本仓模板即含 ℃），导入侧拒绝将直接阻断
+ * 真实点表；别名仅是 canonical 符号的等价写法（值域恒等或同公式），不引入新族。
+ * Go 侧表必须收录同一别名集（双栈一致；挂 IMPL-5 转换表实现时对齐验收）。
+ * MPa **不在**源清单，不收录（现场 MPa 数值应先归一 kPa；旧条目已按验收 F3 去除）。
  */
 export const UNIT_CONVERSION_TABLE_V1 = [
-  // 温度（affine）
+  // ── 温度族（degC/degF/K → degC；affine 含偏移） ──
   { from: 'degf', to: 'degc', kind: 'affine', scale: 5 / 9, offset: (-32 * 5) / 9 },
-  { from: '°f', to: 'degc', kind: 'affine', scale: 5 / 9, offset: (-32 * 5) / 9 },
   { from: 'k', to: 'degc', kind: 'affine', scale: 1, offset: -273.15 },
-  // 温度（identity）
   { from: 'degc', to: 'degc', kind: 'identity', scale: 1, offset: 0 },
+  // display 别名（见上注：℃/°C/°F 为现场显示形）
+  { from: '°f', to: 'degc', kind: 'affine', scale: 5 / 9, offset: (-32 * 5) / 9 },
   { from: '℃', to: 'degc', kind: 'identity', scale: 1, offset: 0 },
   { from: '°c', to: 'degc', kind: 'identity', scale: 1, offset: 0 },
-  { from: 'c', to: 'degc', kind: 'identity', scale: 1, offset: 0 },
-  // 功率（identity / linear）
+  // ── 压力族（kPa/Pa/bar/psi/mmH2O → kPa；linear） ──
+  { from: 'kpa', to: 'kpa', kind: 'identity', scale: 1, offset: 0 },
+  { from: 'pa', to: 'kpa', kind: 'linear', scale: 0.001, offset: 0 },
+  { from: 'bar', to: 'kpa', kind: 'linear', scale: 100, offset: 0 },
+  { from: 'psi', to: 'kpa', kind: 'linear', scale: 6.894757293168361, offset: 0 },
+  { from: 'mmh2o', to: 'kpa', kind: 'linear', scale: 0.00980665, offset: 0 },
+  // ── 功率族（kW/W/MW → kW） ──
   { from: 'kw', to: 'kw', kind: 'identity', scale: 1, offset: 0 },
   { from: 'w', to: 'kw', kind: 'linear', scale: 0.001, offset: 0 },
   { from: 'mw', to: 'kw', kind: 'linear', scale: 1000, offset: 0 },
-  // 压力（linear）
-  { from: 'kpa', to: 'kpa', kind: 'identity', scale: 1, offset: 0 },
-  { from: 'mpa', to: 'kpa', kind: 'linear', scale: 1000, offset: 0 },
-  { from: 'bar', to: 'kpa', kind: 'linear', scale: 100, offset: 0 },
-  // 流量（linear）
-  { from: 'm3/h', to: 'm3/h', kind: 'identity', scale: 1, offset: 0 },
-  { from: 'l/s', to: 'm3/h', kind: 'linear', scale: 3.6, offset: 0 },
-  // 能量（linear）
+  // ── 能量族（kWh/Wh → kWh） ──
   { from: 'kwh', to: 'kwh', kind: 'identity', scale: 1, offset: 0 },
-  // 频率（identity）
+  { from: 'wh', to: 'kwh', kind: 'linear', scale: 0.001, offset: 0 },
+  // ── 流量族（m³/h / L/s → m³/h） ──
+  { from: 'm³/h', to: 'm³/h', kind: 'identity', scale: 1, offset: 0 },
+  { from: 'l/s', to: 'm³/h', kind: 'linear', scale: 3.6, offset: 0 },
+  // display 别名（ASCII 形）
+  { from: 'm3/h', to: 'm³/h', kind: 'identity', scale: 1, offset: 0 },
+  // ── 恒等族（%/Hz/V/A/rpm 等，§5.2 开放列举） ──
+  { from: '%', to: '%', kind: 'identity', scale: 1, offset: 0 },
   { from: 'hz', to: 'hz', kind: 'identity', scale: 1, offset: 0 },
+  { from: 'v', to: 'v', kind: 'identity', scale: 1, offset: 0 },
+  { from: 'a', to: 'a', kind: 'identity', scale: 1, offset: 0 },
+  { from: 'rpm', to: 'rpm', kind: 'identity', scale: 1, offset: 0 },
 ] as const satisfies readonly UnitConversionEntry[];
 
 /** 查转换对（from/to 大小写不敏感；未命中 → null = 不支持）。 */

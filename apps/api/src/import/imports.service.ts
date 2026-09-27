@@ -688,9 +688,11 @@ export class ImportsService {
         ]);
       }
       const passed = blocking === 0;
+      // R12：issue_count = 阻塞 + 警告（**行级**口径）——作业级问题只入报告（job_issues）
+      // 不计入；blocking/warning 两计数器只被行级 push() 递增，故此处即行级总数。
       await tx.query(`UPDATE import_job SET issue_count = $2, status = $3 WHERE id = $1`, [
         jobId,
-        blocking + warning - jobIssues.length,
+        blocking + warning,
         passed ? 'validated' : 'mapping',
       ]);
       this.metrics.dryRuns.inc({ passed: passed ? 'true' : 'false' });
@@ -744,7 +746,8 @@ export class ImportsService {
   /** 202 后异步管线（§8.3）：登记事务 → 配置产物 → 推送应答 → 收敛。 */
   async executeApply(tenantId: string, jobId: string): Promise<void> {
     const db = this.requireDb();
-    // (a) 登记事务（单事务；条件 UPDATE 单赢家）
+    // (a) 登记事务（单事务；条件 UPDATE 单赢家；附带 raw_name → row_no 映射，
+    // 供 gateway_ack_partial 失败清单回填行号——验收建议 F4）
     const registered = await db
       .withTenant(tenantId, async (tx) => {
         const job = (
@@ -797,7 +800,9 @@ export class ImportsService {
          WHERE id = $1 AND status = 'validated' RETURNING id`,
           [jobId],
         );
-        return updated.rowCount === 1 ? job : null;
+        if (updated.rowCount !== 1) return null;
+        const rowNoByRawName = new Map(rows.map((r) => [r.raw_name, r.row_no]));
+        return { job, rowNoByRawName };
       })
       .catch((err: unknown) => {
         if (err instanceof ApplyRaceConflictError) return null;
@@ -807,6 +812,7 @@ export class ImportsService {
       this.metrics.applyOutcomes.inc({ result: 'register_skipped' });
       return;
     }
+    const { rowNoByRawName } = registered;
 
     // (b) 配置产物（全量快照，不落库可重 derive）
     const { artifact, gateway } = await this.buildArtifact(tenantId, jobId);
@@ -843,8 +849,10 @@ export class ImportsService {
         stage: 'apply_push',
         code: 'gateway_ack_partial',
         message: '网关应答部分点失败（登记保留）',
+        // row_no 回填（验收建议 F4）：失败点 join 本作业 import_row 定位行号，
+        // 便于向导失败清单直达（§4.4 形状含 row_no；非本作业点保留 0）
         rows: ack.failed.map((f) => ({
-          row_no: 0,
+          row_no: rowNoByRawName.get(f.raw_name) ?? 0,
           raw_name: f.raw_name,
           reason: f.reason,
         })),

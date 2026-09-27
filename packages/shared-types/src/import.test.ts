@@ -35,6 +35,33 @@ describe('unit conversion table v1（M2-import §6.5，双栈共享契约）', (
     expect(convertSample(1500, w)).toBeCloseTo(1.5, 9);
   });
 
+  it('shouldCoverIngestS52PressureEnergyFlowFamilies（验收 F3：内容源对齐）', () => {
+    // 压力族 kPa/Pa/bar/psi/mmH2O（§5.2 逐项；1 psi = 6.894757293168361 kPa、
+    // 1 mmH2O = 9.80665 Pa）
+    const pair = (from: string, to: string) => {
+      const entry = findUnitConversion(from, to);
+      if (entry === null) throw new Error(`${from}→${to} 应在表内`);
+      return entry;
+    };
+    expect(convertSample(1, pair('psi', 'kPa'))).toBeCloseTo(6.894757293168361, 9);
+    expect(convertSample(1, pair('Pa', 'kPa'))).toBeCloseTo(0.001, 12);
+    expect(convertSample(1, pair('mmH2O', 'kPa'))).toBeCloseTo(0.00980665, 12);
+    expect(convertSample(1, pair('bar', 'kPa'))).toBeCloseTo(100, 9);
+    // 能量族 kWh/Wh
+    expect(convertSample(500, pair('Wh', 'kWh'))).toBeCloseTo(0.5, 9);
+    // 流量族 m³/h / L/s（canonical 上标 ³ + ASCII 别名）
+    expect(convertSample(2, pair('L/s', 'm³/h'))).toBeCloseTo(7.2, 9);
+    expect(pair('m3/h', 'm³/h').kind).toBe('identity');
+    // 恒等族 %/Hz/V/A/rpm（§5.2「等恒等族」）
+    for (const unit of ['%', 'Hz', 'V', 'A', 'rpm']) {
+      expect(findUnitConversion(unit, unit)?.kind).toBe('identity');
+    }
+  });
+
+  it('shouldRejectMPa_perAcceptanceF3（源清单无 MPa，双栈一致不单侧放行）', () => {
+    expect(findUnitConversion('MPa', 'kPa')).toBeNull();
+  });
+
   it('shouldReturnNull_whenPairIsNotInTable', () => {
     // 未命中 = import.unit_conversion_unsupported（PATCH 即时 422 / dry-run 阻塞）
     expect(findUnitConversion('RT', 'kW')).toBeNull();
@@ -42,6 +69,7 @@ describe('unit conversion table v1（M2-import §6.5，双栈共享契约）', (
   });
 
   it('shouldKeepEveryEntryWellFormed', () => {
+    const seen = new Set<string>();
     for (const entry of UNIT_CONVERSION_TABLE_V1) {
       expect(entry.from.length).toBeGreaterThan(0);
       expect(entry.to.length).toBeGreaterThan(0);
@@ -50,6 +78,9 @@ describe('unit conversion table v1（M2-import §6.5，双栈共享契约）', (
       if (entry.kind === 'identity' || entry.kind === 'linear') {
         expect(entry.offset).toBe(0);
       }
+      const key = `${entry.from}→${entry.to}`;
+      expect(seen.has(key)).toBe(false); // 对不重复
+      seen.add(key);
     }
   });
 });

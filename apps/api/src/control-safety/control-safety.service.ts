@@ -257,7 +257,20 @@ export class ControlSafetyService {
           },
         );
       }
-      // GATE_RATE_INVALID（R8 语义扩展〔DAT-132〕）：可控点必填频率上限
+      // GATE_RATE_INVALID（R8 语义扩展〔DAT-132〕）：可控点必填频率上限；
+      // F2 修单——值域（正整数或 null）统一走域码（0/负/非整数同码，不走 DTO 通用码）
+      if (next.write_rate_limit_per_hour !== null) {
+        const rate = next.write_rate_limit_per_hour;
+        if (!Number.isInteger(rate) || rate < 1) {
+          throw new ReasonCodeException(
+            'point.gate_rate_invalid',
+            '频率上限必须为正整数（≥1 次/h）',
+            {
+              field: 'write_rate_limit_per_hour',
+            },
+          );
+        }
+      }
       if (next.is_controllable && next.write_rate_limit_per_hour === null) {
         throw new ReasonCodeException(
           'point.gate_rate_invalid',

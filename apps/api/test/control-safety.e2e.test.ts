@@ -124,6 +124,8 @@ interface CsSeed {
   pointSp2: number; // 设备A同量型第二写点
   pointRo: number; // 只读点
   pointB: number; // 设备B唯一写点
+  pointLd: number; // 设备A load_rate 写点（F1 队列用例）
+  pointEn: number; // 设备A energy 写点（F1 队列用例）
   gatewayId: string;
 }
 
@@ -372,11 +374,38 @@ skipped('control-safety e2e（IMPL-18 验收要点）', () => {
         direction: 'readwrite',
         controllable: true,
       });
-      seed = { systemId, equipmentA, equipmentB, pointSp, pointSp2, pointRo, pointB, gatewayId };
+      // F1 用例：闸门 4 队列上限按【同设备不同点位】排队验证（同点位会被合并语义
+      // 顶位）——设备A 补两个可写点（量类型互异，internal target 解析无歧义）
+      const pointLd = await insertPoint('CHW_LD_04', {
+        equipmentId: equipmentA,
+        quantityType: 'load_rate',
+        direction: 'readwrite',
+        controllable: true,
+      });
+      const pointEn = await insertPoint('CHW_EN_05', {
+        equipmentId: equipmentA,
+        quantityType: 'energy',
+        direction: 'readwrite',
+        controllable: true,
+      });
+      seed = {
+        systemId,
+        equipmentA,
+        equipmentB,
+        pointSp,
+        pointSp2,
+        pointRo,
+        pointB,
+        pointLd,
+        pointEn,
+        gatewayId,
+      };
       // 初始寄存器值 = previous_value（回读一致基线）
       fake.setRegister('CHW_ST_SP_01', 6.0);
       fake.setRegister('CHW_ST_SP_02', 6.0);
       fake.setRegister('CHW_ST_SP_B1', 6.0);
+      fake.setRegister('CHW_LD_04', 6.0);
+      fake.setRegister('CHW_EN_05', 6.0);
     } finally {
       client.release();
     }
@@ -967,6 +996,133 @@ skipped('control-safety e2e（IMPL-18 验收要点）', () => {
   // -------------------------------------------------------------------
   // 执行详情读投影（M5 联动：闸门逐道 + 审计链）
   // -------------------------------------------------------------------
+  // -------------------------------------------------------------------
+  // 修单 B1：EXECUTION_BUDGET_S 预算兜底接线（僵尸提案随周期扫描自动收敛）
+  // -------------------------------------------------------------------
+  it('shouldReclaimZombieExecution_viaSweepWiring（B1：超预算中间态自动收敛）', async () => {
+    fake.faultMode = () => 'apply';
+    fake.setRegister('CHW_ST_SP_B1', 8.5); // 僵尸的写已落现场（8.5），接管须回写原值 6.0
+    // 直插僵尸：approved + awaiting_readback + claimed_at 超预算（600s ≫ 10s）
+    const claimedAt = new Date(Date.now() - 600_000).toISOString();
+    const zombie = await queryRow<{ id: string }>(
+      `INSERT INTO proposal
+         (tenant_id, algo, algo_version, equipment_id, point_id, action, previous_value,
+          rationale, expected_saving_kw, confidence, evidence, expires_at, status, decided_at,
+          execution_result)
+       VALUES ($1, 'optimizer/e2e', '0.1', $2, $3, $4, 6.0, '僵尸接管用例', 1, 0.5, '{}',
+               now() + interval '1 hour', 'approved', now() - interval '700 seconds', $5)
+       RETURNING id`,
+      [
+        world.tenantA,
+        seed.equipmentB,
+        seed.pointB,
+        JSON.stringify({ op: 'set', value: 8.5, unit: 'degC' }),
+        JSON.stringify({ phase: 'awaiting_readback', claimed_at: claimedAt, effective_value: 8.5 }),
+      ],
+    );
+    expect(zombie).toBeDefined();
+    // 不直调 reclaim——等 interval 组合扫描（150ms 节奏）自动接管（验证 B1 接线本体）
+    const terminal = await awaitTerminal(zombie?.id as string, 15_000);
+    expect(terminal.status).toBe('failed');
+    expect(terminal.execution_result['outcome']).toBe('reverted');
+    expect(terminal.execution_result['budget_reclaimed']).toBe(true);
+    // §8 双行审计：verify_failed(algo) + reverted(system)，回写原值 6.0
+    const audits = await queryRows<{ result: string; actor_type: string; new_value: string }>(
+      `SELECT result, actor_type, new_value::text FROM control_audit WHERE proposal_id = $1 ORDER BY id ASC`,
+      [zombie?.id],
+    );
+    expect(audits.map((a) => `${a.result}:${a.actor_type}`)).toEqual([
+      'verify_failed:algo',
+      'reverted:system',
+    ]);
+    expect(Number(audits[1]?.new_value)).toBe(6.0);
+    // 队列互斥已释放：后续提案可正常派发执行（僵尸不再占住设备）
+    const followUp = await submitAndApprove({ action: { op: 'set', value: 7.0, unit: 'degC' } });
+    const followUpTerminal = await awaitTerminal(followUp, 15_000);
+    expect(followUpTerminal.status).toBe('executed');
+  });
+
+  // -------------------------------------------------------------------
+  // 修单 F1：闸门 4 溢出主判定在入队侧即时拒最新（§3.7 对齐）
+  // -------------------------------------------------------------------
+  it('shouldRejectNewestImmediately_onQueueOverflow（F1：入队侧即时拒第 4 条）', async () => {
+    fake.faultMode = (ref) => (ref === 'CHW_ST_SP_02' ? 'silent' : 'apply');
+    // blocker 占住设备A（power 点 silent）→ 同设备其余提案只能排队
+    const blocker = await internalSubmitForEquipment(seed.equipmentA, 'power', 7.1);
+    await adminPost(`/proposals/${blocker}/approve`, {});
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    // 排满队列（cap=3）：三条 waiting 落【不同点位】（同点位会触发合并顶位语义）
+    const waitingQuantities = ['chw_supply_temp', 'load_rate', 'energy'] as const;
+    const waiting: string[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      const pid = await internalSubmitForEquipment(
+        seed.equipmentA,
+        waitingQuantities[i] as string,
+        7.2,
+      );
+      await adminPost(`/proposals/${pid}/approve`, {});
+      waiting.push(pid);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    for (const pid of waiting) {
+      const row = await queryRow<{ phase: string }>(
+        `SELECT execution_result->>'phase' AS phase FROM proposal WHERE id = $1`,
+        [pid],
+      );
+      expect(row?.phase).toBe('queued');
+    }
+    // 第 4 条（最新）→ 入队侧即时拒（onApproved 路径，不等扫描周期）
+    const fourth = await internalSubmitForEquipment(seed.equipmentA, 'chw_supply_temp', 7.9);
+    await adminPost(`/proposals/${fourth}/approve`, {});
+    const fourthTerminal = await awaitTerminal(fourth, 10_000);
+    expect(fourthTerminal.status).toBe('failed');
+    expect(fourthTerminal.execution_result['reason_code']).toBe('proposal.gate_conflict_overflow');
+    const gates = fourthTerminal.execution_result['gates'] as Array<{
+      gate: number;
+      outcome: string;
+    }>;
+    const conflictGate = gates.find((g) => g.gate === 4);
+    expect(conflictGate?.outcome).toBe('overflow');
+    // 已排队的 3 条不受损（仍 queued，等 blocker 终态后 FIFO 派发）
+    for (const pid of waiting) {
+      const row = await queryRow<{ status: string; phase: string }>(
+        `SELECT status, execution_result->>'phase' AS phase FROM proposal WHERE id = $1`,
+        [pid],
+      );
+      expect(row?.status).toBe('approved');
+      expect(row?.phase).toBe('queued');
+    }
+    // 排空：blocker 终态 → 三条依序执行（apply 模式）
+    fake.faultMode = () => 'apply';
+    await awaitTerminal(blocker, 25_000);
+    for (const pid of waiting) {
+      const terminal = await awaitTerminal(pid, 25_000);
+      expect(terminal.status).toBe('executed');
+    }
+  }, 90_000);
+
+  // -------------------------------------------------------------------
+  // 修单 F2：频率负例统一域码（0/负/非整数 → point.gate_rate_invalid）
+  // -------------------------------------------------------------------
+  it('shouldReturnRateDomainCode_forAllFormatViolations（F2：值域负例同码）', async () => {
+    for (const bad of [0, -1, 2.5]) {
+      const response = await adminPatch(`/points/${String(seed.pointB)}/gate`, {
+        write_rate_limit_per_hour: bad,
+        reason: `F2 负例 ${String(bad)}`,
+      });
+      expect(response.status).toBe(422);
+      expect((response.body as { error: { reason_code: string } }).error.reason_code).toBe(
+        'point.gate_rate_invalid',
+      );
+    }
+    // 合法值仍通（正整数）
+    const ok = await adminPatch(`/points/${String(seed.pointB)}/gate`, {
+      write_rate_limit_per_hour: 60,
+      reason: 'F2 正例',
+    });
+    expect(ok.status).toBe(200);
+  });
+
   it('shouldExposeExecutionDetail_viaM5ReadModel（读投影 + 审计链内联）', async () => {
     const proposalId = await submitAndApprove({ action: { op: 'set', value: 7.1, unit: 'degC' } });
     await awaitTerminal(proposalId);

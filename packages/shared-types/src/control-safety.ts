@@ -284,7 +284,10 @@ export const GatePatchRequestSchema = z.object({
   is_controllable: z.boolean().optional(),
   clamp_min: z.number().nullable().optional(),
   clamp_max: z.number().nullable().optional(),
-  write_rate_limit_per_hour: z.number().int().min(1).nullable().optional(),
+  // F2（修单）：值域（正整数或 null）由服务端统一判 point.gate_rate_invalid
+  // （M8-safety-ui §4.3：0/负/非整数 → 字段级红字域码，不走 DTO 通用码）；
+  // schema 层只收窄类型形状
+  write_rate_limit_per_hour: z.number().nullable().optional(),
   // reason 必填由服务端域码 point.gate_reason_required 兜底（M8 §1.2：
   // 空值提交 → 字段级错误；schema 层只限长度）
   reason: z.string().trim().max(2000),

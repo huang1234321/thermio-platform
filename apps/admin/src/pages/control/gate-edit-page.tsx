@@ -216,9 +216,9 @@ export function GateEditPage(): React.ReactNode {
           <Form.Item
             name="write_rate_limit_per_hour"
             label="频率上限（次/h）"
-            extra="留空 = 运行时默认 6 次/h（control-safety §3.3 兜底）"
+            extra="可控点必填（正整数）；运行时兜底 6 次/h 仅对存量空列生效（control-safety §3.3）"
           >
-            <InputNumber style={{ width: 160 }} min={1} precision={0} placeholder="默认 6" />
+            <InputNumber style={{ width: 160 }} min={1} precision={0} />
           </Form.Item>
           {point !== null && (
             <Typography.Text type="secondary">当前值域：{clampText(point)}</Typography.Text>

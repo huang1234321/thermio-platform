@@ -10,7 +10,7 @@
  * - 模式变更时间线（§5.5）：config-audit?point_id=&field=control_mode 嵌入。
  */
 import { Alert, Button, Card, Input, Modal, Space, Steps, Typography, message } from 'antd';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ConfigAuditListResponseSchema,
@@ -42,9 +42,11 @@ export function ModeChangePage(): React.ReactNode {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const cancelledRef = useRef<boolean>(false);
-  const isCancelled = (): boolean => cancelledRef.current;
   useEffect(() => {
+    // F3 修单：取消标记为 effect 局部态（组件级 ref 在 dev StrictMode 双跑下被首轮
+    // cleanup 永久置真 → 骨架永锁）；helper 读子经调用边界读，避免 CFA 字面量收窄
+    const state: { cancelled: boolean } = { cancelled: false };
+    const isCancelled = (): boolean => state.cancelled;
     if (pointId === undefined) return;
     void (async () => {
       setLoading(true);
@@ -72,7 +74,7 @@ export function ModeChangePage(): React.ReactNode {
       }
     })();
     return () => {
-      cancelledRef.current = true;
+      state.cancelled = true;
     };
   }, [pointId]);
 

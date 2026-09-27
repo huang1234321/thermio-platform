@@ -68,6 +68,7 @@ async function finalizeGateRejection(
     mutate?: ((result: ExecutionResult) => ExecutionResult) | undefined;
   },
 ): Promise<boolean> {
+  const baseMutate = params.mutate;
   return finalizeProposal(tx, {
     tenantId: params.tenantId,
     proposalId: params.proposalId,
@@ -85,7 +86,11 @@ async function finalizeGateRejection(
         new_value: null,
       },
     ],
-    mutate: params.mutate,
+    // 逐道闸门结果随终态持久化（M5 §2.3 读投影 gates 数据面；F1 修单补齐）
+    mutate: (result) => {
+      const withGates = { ...result, gates: [...params.gates] };
+      return baseMutate === undefined ? withGates : baseMutate(withGates);
+    },
   });
 }
 
@@ -122,12 +127,12 @@ export class ControlDispatcherService implements OnModuleInit, OnApplicationShut
       return;
     }
     this.timer = setInterval(
-      () => void this.scanAll(),
+      () => void this.sweep(),
       Math.max(100, this.config.CONTROL_DISPATCH_SCAN_INTERVAL_MS),
     );
     this.timer.unref();
-    // 启动即扫一轮：重启后由扫描重建内存视图（§3.7 崩溃恢复）
-    void this.scanAll();
+    // 启动即扫一轮：重启后由扫描重建内存视图（§3.7 崩溃恢复）+ 预算兜底接管
+    void this.sweep();
   }
 
   onApplicationShutdown(): void {
@@ -184,8 +189,61 @@ export class ControlDispatcherService implements OnModuleInit, OnApplicationShut
           }
           return true;
         }
-        // 受理通过 → 入队（phase=queued；T1 gates + clamp 预演随行记录，§3.0）
+        // 受理通过 → 闸门 4 溢出主判定（§3.7 队列上限：同设备已有 CONFLICT_QUEUE_MAX
+        // 条排队时，最新到达者即时拒绝——不占队列、不等扫描周期）
         const t1Pass = t1 !== null && t1.kind === 'pass' ? t1 : null;
+        const equipmentId = ctx.equipment_id;
+        if (equipmentId !== null) {
+          const depthRow = await tx.query<{ depth: string }>(
+            `SELECT count(*) AS depth FROM proposal
+             WHERE tenant_id = $1 AND equipment_id = $2 AND status = 'approved'
+               AND execution_result->>'phase' = 'queued'`,
+            [tenantId, equipmentId],
+          );
+          const depth = Number(depthRow.rows[0]?.depth ?? '0');
+          if (depth >= this.config.controlSafety.conflictQueueMax) {
+            const won = await finalizeGateRejection(tx, {
+              tenantId,
+              proposalId,
+              pointId: ctx.point_id,
+              reasonCode: 'proposal.gate_conflict_overflow',
+              gates: [
+                ...([] as GateOutcome[]),
+                ...(t1Pass?.gates ?? []),
+                {
+                  gate: 4,
+                  name: 'conflict',
+                  outcome: 'overflow',
+                  detail: { depth, max: this.config.controlSafety.conflictQueueMax },
+                },
+              ],
+            });
+            if (won) {
+              this.metrics.recordGate('conflict');
+              await this.events.publishControlExecuted(
+                buildExecutedEvent({
+                  tenantId,
+                  proposalId,
+                  pointId: ctx.point_id,
+                  equipmentId,
+                  systemId: ctx.system_id,
+                  algo: ctx.algo,
+                  algoVersion: ctx.algo_version,
+                  outcome: 'rejected_by_gate',
+                  reasonCode: 'proposal.gate_conflict_overflow',
+                  valueBefore: ctx.previous_value,
+                  valueCommanded: ctx.action_value,
+                  valueEffective: null,
+                  clamped: false,
+                  decidedBy: ctx.decided_by,
+                  verify: { readings: [], retries_write: 0 },
+                }),
+              );
+            }
+            return true;
+          }
+        }
+        // 入队（phase=queued；T1 gates + clamp 预演随行记录，§3.0）
         await tx.query(
           `UPDATE proposal SET execution_result = $3 WHERE tenant_id = $1 AND id = $2`,
           [
@@ -211,6 +269,18 @@ export class ControlDispatcherService implements OnModuleInit, OnApplicationShut
         err,
       });
     }
+  }
+
+  /**
+   * 周期组合扫描（B1 修单接线）：① 队列扫描派发（§3.7）+ ② 预算兜底接管
+   * （§2/§3.7：非终态超 EXECUTION_BUDGET_S 的僵尸提案收敛——先回写原值再终态化，
+   * 绝不静默丢弃）。机制本体经探针 P8 直调验证，此处补齐调度接线。
+   */
+  private async sweep(): Promise<void> {
+    await this.scanAll();
+    await this.reclaimStaleExecutions().catch((err: unknown) => {
+      this.logger.error({ msg: 'control_reclaim_sweep_failed', err });
+    });
   }
 
   /** 全租户扫描（10s 兜底；单租户 MVP 形态下一次列表查询）。 */
@@ -403,7 +473,9 @@ export class ControlDispatcherService implements OnModuleInit, OnApplicationShut
         if (head.equipment_id === null) continue;
         this.metrics.setConflictQueueDepth(head.equipment_id, Number(head.depth));
         if (Number(head.depth) > conflictQueueMax) {
-          // 溢出在入队侧即时判（onApproved）；此处兜底存量溢出（部署切换遗留）
+          // 溢出竞态兜底（非主判定）：主判定在 onApproved 入队侧即时拒最新（§3.7）。
+          // 并发 approve 各自计数可同时过闸（事务间互不见未提交行）→ 深度瞬时超限，
+          // 此处按 FIFO 拒队首收敛；单到达路径不会走到本分支。
           const ctx = await this.arbitration.loadContext(tx, tenantId, head.id);
           if (ctx === null) continue;
           const won = await finalizeGateRejection(tx, {

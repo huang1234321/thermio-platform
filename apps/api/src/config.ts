@@ -10,7 +10,11 @@
  *   （PG_URL，业务真相源）。两者未设置时遥测查询端点显式降级 503
  *   （telemetry.store_unavailable），服务本体照常起（与 kafka 同一停用形态）。
  */
-import { TELEMETRY_SPAN_LIMIT_DAYS, type TelemetryInterval } from '@thermio/shared-types';
+import {
+  STREAM_LIMITS,
+  TELEMETRY_SPAN_LIMIT_DAYS,
+  type TelemetryInterval,
+} from '@thermio/shared-types';
 import { z } from 'zod';
 
 const AppConfigSchema = z.object({
@@ -55,6 +59,26 @@ const AppConfigSchema = z.object({
     .int()
     .positive()
     .default(TELEMETRY_SPAN_LIMIT_DAYS['1h']),
+  // ── SSE 实时通道（platform.md §10/§12，M3-monitor §3.5，IMPL-14）──
+  /** 节流窗口 1–5s 可配默认 2s（ADR-013；测试可压至下限加速）。 */
+  SSE_THROTTLE_WINDOW_MS: z.coerce
+    .number()
+    .int()
+    .min(1_000)
+    .max(5_000)
+    .default(STREAM_LIMITS.throttle_window_default_ms),
+  /** 心跳 `: ping` 间隔默认 15s（代理空闲超时之下；测试可压短加速）。 */
+  SSE_HEARTBEAT_INTERVAL_MS: z.coerce
+    .number()
+    .int()
+    .min(500)
+    .default(STREAM_LIMITS.heartbeat_interval_default_ms),
+  /** 每实例并发连接上限（超出 503 stream.server_busy + Retry-After: 5）。 */
+  SSE_MAX_CONNECTIONS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(STREAM_LIMITS.max_connections_per_instance),
   // ── EMQX 内部端点（emqx.md §3/§5/§7，IMPL-7）──
   /** Bearer 服务凭证（platform.md §11：EMQX_INTERNAL_TOKEN = SVC_TOKEN_EMQX 同一枚）。 */
   EMQX_INTERNAL_TOKEN: z.string().default(''),
@@ -104,6 +128,12 @@ export interface AppConfig extends z.infer<typeof AppConfigSchema> {
   readonly telemetrySpanLimitDays: Readonly<Record<TelemetryInterval, number>>;
   /** 对账是否启用（EMQX_MANAGEMENT_BASE_URL 非空）。 */
   readonly emqxReconcileEnabled: boolean;
+  /** SSE 通道参数（platform.md §10/§12；M3-monitor §3.5）。 */
+  readonly sse: {
+    readonly throttleWindowMs: number;
+    readonly heartbeatIntervalMs: number;
+    readonly maxConnections: number;
+  };
   /** 认证域是否启用（PG_API_URL/PG_AUTH_URL/AUTH_JWT_SECRET 三者齐备）。 */
   readonly authEnabled: boolean;
 }
@@ -131,6 +161,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       '1h': parsed.TELEMETRY_1H_SPAN_MAX_DAYS,
     },
     emqxReconcileEnabled: parsed.EMQX_MANAGEMENT_BASE_URL.length > 0,
+    sse: {
+      throttleWindowMs: parsed.SSE_THROTTLE_WINDOW_MS,
+      heartbeatIntervalMs: parsed.SSE_HEARTBEAT_INTERVAL_MS,
+      maxConnections: parsed.SSE_MAX_CONNECTIONS,
+    },
     authEnabled:
       parsed.PG_API_URL.length > 0 &&
       parsed.PG_AUTH_URL.length > 0 &&

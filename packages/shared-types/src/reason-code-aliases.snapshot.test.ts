@@ -203,7 +203,6 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "PROPOSAL_VERIFY_FAILED",
           "SCENE_NOT_FOUND",
           "SELFCHECK_NOT_READY",
-          "STREAM_LIMIT_EXCEEDED",
           "UNIT_CONVERSION_UNSUPPORTED",
         ],
         "registered": [
@@ -239,6 +238,7 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "ROLE_UNKNOWN",
           "SCOPE_BUILDING_MISMATCH",
           "SERVICE_UNAUTHORIZED",
+          "STREAM_LIMIT_EXCEEDED",
           "SUPPRESS_DURATION_INVALID",
           "SYSTEM_NOT_FOUND",
           "SYSTEM_TYPE_UNKNOWN",

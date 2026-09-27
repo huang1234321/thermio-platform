@@ -5,6 +5,11 @@
 # 1. apps/api/src/auth/tokens.test.ts：HMAC 签名/验签单测需要**确定性**签名钥样本
 #    （运行时随机则断言不可复现）。字面量仅存在于测试进程内存，不接触任何环境，
 #    非凭据；generic-api-key 规则按「SECRET 标识符 + 高熵字面量」误报。
+# 2. apps/admin/public/draco/draco_decoder.js 与 packages/viz-3d/assets/draco/draco_decoder.js：
+#    Google Draco 官方解码器 vendored 产物（公开库文件，DAT-117 UI 自测门 r1 取证：
+#    SARIF artifact 10924863639），命中行为其源码内的 Base64 字母表常量
+#    （`var keyStr = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdef...'`）——`keyStr` 标识符
+#    撞 generic-api-key 的 SECRET 关键词，非凭据、无泄漏。
 # 新增豁免：必须在此逐条注释用途，禁止路径级大范围放行。
 title = "thermio-platform gitleaks config"
 
@@ -12,7 +17,9 @@ title = "thermio-platform gitleaks config"
   useDefault = true
 
 [allowlist]
-  description = "Public test fixtures (deterministic literals, not credentials)"
+  description = "Public test fixtures and vendored public library artifacts (not credentials)"
   paths = [
     '''apps/api/src/auth/tokens\.test\.ts''',
+    '''apps/admin/public/draco/draco_decoder\.js''',
+    '''packages/viz-3d/assets/draco/draco_decoder\.js''',
   ]

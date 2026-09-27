@@ -18,6 +18,7 @@ import {
   type TelemetryStreamHandle,
 } from '../../app/telemetry-stream.js';
 import { SceneDetailSchema, type SceneDetail } from '@thermio/scene-schema';
+import { SystemListResponseSchema } from '@thermio/shared-types';
 import {
   EquipmentConditionDetailSchema,
   EquipmentConditionListSchema,
@@ -30,6 +31,7 @@ import {
 import {
   EQUIPMENTS,
   MONITOR_OVERVIEW,
+  MONITOR_SYSTEMS,
   OPEN_ALARMS,
   POINT_LATEST,
   SCENE_DETAIL,
@@ -57,7 +59,13 @@ export async function fetchEquipmentConditions(
   if (MONITOR_MOCK) {
     const keyword = query.keyword?.toLowerCase();
     const items = EQUIPMENTS.filter((card) => {
-      if (query.systemId !== undefined && card.equipment.system_id !== query.systemId) return false;
+      // 空串 = 未选（页面 Select 清空即 ''），与 undefined 同视，不参与过滤
+      if (
+        query.systemId !== undefined &&
+        query.systemId !== '' &&
+        card.equipment.system_id !== query.systemId
+      )
+        return false;
       if (
         query.equipmentType !== undefined &&
         query.equipmentType !== '' &&
@@ -82,7 +90,8 @@ export async function fetchEquipmentConditions(
     return { items, nextCursor: null };
   }
   const params = new URLSearchParams();
-  if (query.systemId !== undefined) params.set('system_id', query.systemId);
+  if (query.systemId !== undefined && query.systemId !== '')
+    params.set('system_id', query.systemId);
   if (query.equipmentType !== undefined && query.equipmentType !== '')
     params.set('equipment_type', query.equipmentType);
   if (query.runState !== undefined && query.runState !== '')
@@ -98,6 +107,20 @@ export async function fetchEquipmentConditions(
 export async function fetchEquipmentConditionDetail(equipmentId: string) {
   if (MONITOR_MOCK) return equipmentDetail(equipmentId);
   return apiFetch(`/monitor/equipments/${equipmentId}`, EquipmentConditionDetailSchema);
+}
+
+/**
+ * 系统清单（§3.2 筛选白名单首项）。real 走 M1 `GET /buildings/{id}/systems`
+ * （assets.read）；纯监控角色无该能力时调用方 catch → 空清单（筛选器隐藏，
+ * 不阻塞列表）。buildingId 由调用方从 overview 取。
+ */
+export async function fetchMonitorSystems(
+  buildingId: string | null,
+): Promise<readonly { id: string; name: string }[]> {
+  if (MONITOR_MOCK) return MONITOR_SYSTEMS;
+  if (buildingId === null) return [];
+  const page = await apiFetch(`/buildings/${buildingId}/systems`, SystemListResponseSchema);
+  return page.items.map((system) => ({ id: system.id, name: system.name }));
 }
 
 export async function fetchSceneDetail(sceneId: string): Promise<SceneDetail> {
@@ -123,6 +146,8 @@ export async function fetchPointsLatestBatch(pointIds: readonly number[]) {
 /**
  * 点位值展示文本：value_text 契约 = 枚举键（run_status 为 '1'/'0'，bind-core
  * DEFAULT_RUN_ENUM 同源）——人读文案只在展示层映射，不回写数据面。
+ * value_text 缺失（如聚合路径 last 只有数值）时按数值回退映射，两条取数路径
+ * 渲染一致（视觉门 r1 页4-3：同一卡片一处「运行」一处「1」）。
  */
 export function displayPointValue(
   quantityType: string | null,
@@ -130,10 +155,50 @@ export function displayPointValue(
 ): string {
   if (latest === null) return '—';
   if (quantityType === 'run_status') {
-    if (latest.value_text === '1') return '运行';
-    if (latest.value_text === '0') return '停机';
+    const raw = latest.value_text ?? (latest.value !== null ? String(latest.value) : null);
+    if (raw === '1') return '运行';
+    if (raw === '0') return '停机';
+    if (raw !== null) return raw; // 开放枚举不臆译
   }
   return latest.value_text ?? (latest.value !== null ? String(latest.value) : '—');
+}
+
+/**
+ * 故障态运行状态词汇（视觉门 r1 页3-5）：run_state=fault 卡的 run_status 值
+ * 与备用卡同为「停机」，文本层不可区分——故障卡显式带因。
+ */
+export function statusDisplayText(
+  quantityType: string | null,
+  latest: { value_text: string | null; value: number | null } | null,
+  runState: string | null,
+): string {
+  const base = displayPointValue(quantityType, latest);
+  if (runState === 'fault' && base === '停机') return '停机（故障）';
+  return base;
+}
+
+const pad2 = (value: number): string => String(value).padStart(2, '0');
+
+/** baseline §2.2 时间格式（中文单语）：YYYY-MM-DD HH:mm:ss，不吃运行环境 locale。 */
+export function formatStamp(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+  return (
+    `${String(at.getFullYear())}-${pad2(at.getMonth() + 1)}-${pad2(at.getDate())} ` +
+    `${pad2(at.getHours())}:${pad2(at.getMinutes())}:${pad2(at.getSeconds())}`
+  );
+}
+
+/** 曲线 x 轴刻度：窗口 ≤1 天恒 HH:mm（本地时区）。 */
+export function formatTick(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return '';
+  return `${pad2(at.getHours())}:${pad2(at.getMinutes())}`;
+}
+
+/** quality 位掩码友好标签（视觉门 r1 页4-建议）：0 = 良好，非 0 保留码值。 */
+export function qualityLabel(quality: number): string {
+  return quality === 0 ? '良好' : `q${String(quality)}`;
 }
 
 // ---------------------------------------------------------------------------

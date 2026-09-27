@@ -9,9 +9,15 @@
 import { describe, expect, it } from 'vitest';
 import { evaluateScene, resolveEquipmentRunState, type SceneConfigInput } from '@thermio/bind-core';
 import { SceneConfigSchema } from '@thermio/scene-schema';
-import { EQUIPMENTS, OPEN_ALARMS, POINT_LATEST, SCENE_DETAIL } from './monitor-fixtures.js';
+import {
+  EQUIPMENTS,
+  MONITOR_SYSTEMS,
+  OPEN_ALARMS,
+  POINT_LATEST,
+  SCENE_DETAIL,
+} from './monitor-fixtures.js';
 import { backoffDelayMs, parseSseFrames, parseTelemetryData } from '../../app/telemetry-stream.js';
-import { displayPointValue } from './monitor-data.js';
+import { displayPointValue, formatStamp, qualityLabel, statusDisplayText } from './monitor-data.js';
 
 describe('镜像一致性（bind-core ⇄ scene-schema ⇄ fixtures）', () => {
   it('fixtures 场景配置过 SceneConfigSchema 且可直接喂 evaluateScene', () => {
@@ -93,6 +99,43 @@ describe('telemetry-stream 纯函数（M3-monitor §4.3）', () => {
     expect(displayPointValue('run_status', { value_text: '9', value: 9 })).toBe('9'); // 开放枚举不臆译
     expect(displayPointValue('power', { value_text: null, value: 268.4 })).toBe('268.4');
     expect(displayPointValue('power', null)).toBe('—');
+    // 视觉门 r1 页4-3：value_text 缺失（聚合 last 只有数值）按数值回退，两取数路径渲染一致
+    expect(displayPointValue('run_status', { value_text: null, value: 1 })).toBe('运行');
+    expect(displayPointValue('run_status', { value_text: null, value: 0 })).toBe('停机');
+    expect(displayPointValue('run_status', { value_text: null, value: null })).toBe('—');
+  });
+
+  it('故障卡运行状态词汇（页3-5）：fault + 停机 → 停机（故障）', () => {
+    const stopped = { value_text: '0', value: 0 };
+    expect(statusDisplayText('run_status', stopped, 'fault')).toBe('停机（故障）');
+    expect(statusDisplayText('run_status', stopped, 'standby')).toBe('停机');
+    expect(statusDisplayText('power', { value_text: null, value: 0 }, 'fault')).toBe('0');
+  });
+
+  it('时间/质量位格式（页4-6·建议）：YYYY-MM-DD HH:mm:ss 中文单语 + quality 友好标签', () => {
+    expect(formatStamp('2026-09-27T08:00:00+08:00')).toMatch(
+      /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
+    );
+    expect(formatStamp('not-a-date')).toBe('not-a-date'); // 畸形输入原样透传不抛
+    expect(qualityLabel(0)).toBe('良好');
+    expect(qualityLabel(6)).toBe('q6');
+  });
+
+  it('fixtures 同型设备关键点位集一致（页3-1）：同型卡点位名序列相同', () => {
+    const pointNames = (localId: string): string[] => {
+      const card = EQUIPMENTS.find((item) => item.equipment.local_id === localId);
+      if (card === undefined) throw new Error(`fixture 缺设备 ${localId}`);
+      return card.key_points.map((point) => point.display_name ?? String(point.point_id));
+    };
+    expect(pointNames('CH-01')).toEqual(pointNames('CH-02'));
+    expect(pointNames('CHWP-01')).toEqual(pointNames('CHWP-02'));
+    expect(pointNames('CWP-01')).toEqual(pointNames('CWP-02'));
+    expect(pointNames('CT-01')).toEqual(pointNames('CT-02'));
+    // 全部卡非空（渲染层仍保留空数组「—」占位兜底，见页面实现）
+    for (const card of EQUIPMENTS) expect(card.key_points.length).toBeGreaterThan(0);
+    // 系统筛选种子与设备 system_id 闭合
+    const systemIds = new Set(EQUIPMENTS.map((card) => card.equipment.system_id));
+    for (const system of MONITOR_SYSTEMS) expect(systemIds.has(system.id)).toBe(true);
   });
 
   it('畸形 telemetry data 跳过不抛', () => {

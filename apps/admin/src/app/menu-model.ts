@@ -36,3 +36,20 @@ export function visibleMenuEntries(capabilities: readonly string[]): readonly Me
   const granted = new Set(capabilities);
   return MENU_ENTRIES.filter((entry) => entry.capability === null || granted.has(entry.capability));
 }
+
+/**
+ * 当前路由的菜单选中键：取 route 为 pathname 前缀的最长条目——子路由
+ * （如 /monitor/equipments/:id）归属父菜单高亮，不再整栏全平（视觉门 r1 页3-4）。
+ * 返回条目 route（app-layout 的 Menu 以 route 为 item key）；无前缀命中返回空。
+ */
+export function selectedMenuKeys(
+  pathname: string,
+  entries: readonly MenuEntry[] = MENU_ENTRIES,
+): string[] {
+  let best: MenuEntry | null = null;
+  for (const entry of entries) {
+    if (pathname !== entry.route && !pathname.startsWith(`${entry.route}/`)) continue;
+    if (best === null || entry.route.length > best.route.length) best = entry;
+  }
+  return best === null ? [] : [best.route];
+}

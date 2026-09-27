@@ -2,8 +2,9 @@
  * 监控总览（M3-monitor §8.1 页面 1：3D 全屏主视图 + KPI 悬浮层）。
  *
  * 结构对齐 §8.1：左上 KPI 四卡（可收起，localStorage 记忆）→ 顶部筛选
- * （ALL/CHW/CW + 图例四回路细分）→ 场景切换器 / 设备目录抽屉 / 属性面板抽屉 /
- * 工具栏（流向·标签·复位·全屏）→ SSE 状态徽标与断线横幅（§4.3）。
+ * （ALL/CHW/CW + 图例四回路细分）→ 场景切换器（?scene= 入 URL 可分享回链）/
+ * 设备目录抽屉 / 属性面板抽屉 / 工具栏（流向·标签·俯视·复位·全屏）→
+ * SSE 状态徽标与断线横幅（§4.3）。
  * 键盘：Space 流向 / R 复位 / F 定位所选 / Esc 关闭（§5.2 全集）。
  *
  * 数据：overview + 告警快照 60s 轮询（REST）；遥测走 SSE（§4.2，open 时批量
@@ -11,7 +12,7 @@
  * monitor-data.ts（演示模式显式挂「演示数据」角标）。
  */
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Alert,
   Badge,
@@ -27,6 +28,7 @@ import {
   Spin,
   Tag,
   Tooltip,
+  theme,
 } from 'antd';
 import type { ReactNode } from 'react';
 import { Scene3D, type CircuitFilter, type PlantScene, type SceneHoverInfo } from '@thermio/viz-3d';
@@ -67,6 +69,8 @@ const STREAM_LABEL = {
 
 export function MonitorOverviewPage(): ReactNode {
   const navigate = useNavigate();
+  const { token } = theme.useToken();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [overview, setOverview] = useState<MonitorOverview | null>(null);
   const [sceneDetail, setSceneDetail] = useState<SceneDetail | null>(null);
   const [manifest, setManifest] = useState<SceneManifest | null>(null);
@@ -80,7 +84,9 @@ export function MonitorOverviewPage(): ReactNode {
   const [filter, setFilter] = useState<CircuitFilter>('ALL');
   const [flowOn, setFlowOn] = useState(true);
   const [labelsOn, setLabelsOn] = useState(true);
-  const [sceneKind, setSceneKind] = useState<'3d' | '2d'>('3d');
+  const [sceneKind, setSceneKind] = useState<'3d' | '2d'>(() =>
+    searchParams.get('scene') === '2d' ? '2d' : '3d',
+  );
   const [kpiCollapsed, setKpiCollapsed] = useState(
     () => globalThis.localStorage.getItem(KPI_COLLAPSED_KEY) === '1',
   );
@@ -249,6 +255,45 @@ export function MonitorOverviewPage(): ReactNode {
     });
   };
 
+  // 场景选中态入 URL（§8.1③ 可分享/回链）：?scene=3d|2d，replace 不堆历史栈
+  const changeSceneKind = useCallback(
+    (kind: '3d' | '2d'): void => {
+      setSceneKind(kind);
+      setSearchParams({ scene: kind }, { replace: true });
+    },
+    [setSearchParams],
+  );
+  // 挂载即补默认值——URL 恒携带当前场景（分享 /monitor 也得到可回链状态）
+  useEffect(() => {
+    if (searchParams.get('scene') === null) {
+      setSearchParams({ scene: sceneKind }, { replace: true });
+    }
+    // 仅首挂载补一次；后续由 changeSceneKind 驱动
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sceneKind 初始值即默认场景
+  }, []);
+
+  // 全屏（§8.1③ 视图工具栏）：作用于 3D 主视图容器
+  const viewRef = useRef<HTMLDivElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = (): void => {
+      setFullscreen(Boolean(document.fullscreenElement));
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+    };
+  }, []);
+  const toggleFullscreen = (): void => {
+    const container = viewRef.current;
+    if (container === null) return;
+    if (document.fullscreenElement !== null) {
+      void document.exitFullscreen();
+    } else {
+      void container.requestFullscreen().catch(() => undefined);
+    }
+  };
+
   const directoryAssets = useMemo(() => {
     if (manifest === null) return [];
     const directoryKinds = new Set(['chiller', 'pump', 'tower', 'load']);
@@ -266,7 +311,7 @@ export function MonitorOverviewPage(): ReactNode {
   const sceneState = sceneError !== null ? 'error' : manifest === null ? 'loading' : 'ready';
 
   return (
-    <div style={{ position: 'relative' }}>
+    <div ref={viewRef} style={{ position: 'relative' }}>
       <Card
         styles={{
           body: { padding: 0, position: 'relative', height: 'calc(100vh - 168px)', minHeight: 520 },
@@ -283,15 +328,13 @@ export function MonitorOverviewPage(): ReactNode {
                     ? 'error'
                     : 'warning'
               }
-              text={STREAM_LABEL[streamStatus]}
+              text={streamLabel(streamStatus, boundPointIds.length)}
             />
             <Select<'3d' | '2d'>
               size="small"
               value={sceneKind}
               style={{ minWidth: 168 }}
-              onChange={(kind) => {
-                setSceneKind(kind);
-              }}
+              onChange={changeSceneKind}
               options={(overview?.scenes ?? []).map((scene) => ({
                 value: scene.kind,
                 label: scene.name,
@@ -443,7 +486,9 @@ export function MonitorOverviewPage(): ReactNode {
           </div>
         )}
 
-        {/* KPI 悬浮层（§8.1①：四卡 + 收起记忆 + 下钻三向） */}
+        {/* KPI 悬浮层（§8.1①：四卡 + 收起记忆 + 下钻三向）。
+            maxWidth 预留右侧工具栏带宽：窄视口时收起按钮换行而非被挤出遮挡
+            （视觉门 r1 页1-2，1440px 下收起入口不可达）。 */}
         <div
           style={{
             position: 'absolute',
@@ -451,8 +496,10 @@ export function MonitorOverviewPage(): ReactNode {
             left: 12,
             zIndex: 10,
             display: 'flex',
+            flexWrap: 'wrap',
             gap: 8,
             alignItems: 'flex-start',
+            maxWidth: 'calc(100% - 520px)',
           }}
         >
           {kpiCollapsed ? (
@@ -569,9 +616,19 @@ export function MonitorOverviewPage(): ReactNode {
           </Space>
         </div>
 
-        {/* 工具栏（§5.4/§5.2：流向 Space、标签、复位 R、目录、全屏） */}
+        {/* 工具栏（§8.1③ 视图工具栏全集：总览/俯视/流向/标签/全屏 + 目录） */}
         <div
-          style={{ position: 'absolute', top: 12, right: 12, zIndex: 10, display: 'flex', gap: 8 }}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 10,
+            display: 'flex',
+            flexWrap: 'wrap',
+            justifyContent: 'flex-end',
+            gap: 8,
+            maxWidth: 'calc(100% - 420px)',
+          }}
         >
           <Badge count={directoryAssets.length} size="small" offset={[-4, 2]}>
             <Button
@@ -600,7 +657,13 @@ export function MonitorOverviewPage(): ReactNode {
             {labelsOn ? '隐藏标签' : '显示标签'}
           </Button>
           <Button size="small" onClick={() => sceneRef.current?.preset('overview')}>
-            复位视角 (R)
+            总览视角 (R)
+          </Button>
+          <Button size="small" onClick={() => sceneRef.current?.preset('plan')}>
+            俯视
+          </Button>
+          <Button size="small" onClick={toggleFullscreen}>
+            {fullscreen ? '退出全屏' : '全屏'}
           </Button>
         </div>
 
@@ -613,8 +676,8 @@ export function MonitorOverviewPage(): ReactNode {
               top: hover.y + 12,
               zIndex: 30,
               pointerEvents: 'none',
-              background: 'rgba(0,0,0,0.75)',
-              color: '#fff',
+              background: token.colorBgSpotlight,
+              color: token.colorTextLightSolid,
               padding: '2px 8px',
               borderRadius: 4,
               fontSize: 12,
@@ -665,7 +728,7 @@ export function MonitorOverviewPage(): ReactNode {
                   padding: '6px 8px',
                   borderRadius: 4,
                   cursor: 'pointer',
-                  background: selectedId === asset.id ? 'rgba(11,114,133,0.08)' : undefined,
+                  background: selectedId === asset.id ? token.colorPrimaryBg : undefined,
                 }}
               >
                 <span>
@@ -681,7 +744,9 @@ export function MonitorOverviewPage(): ReactNode {
                     ●
                   </span>
                   {asset.name}
-                  <span style={{ color: '#8c8c8c', marginLeft: 8, fontSize: 12 }}>{asset.id}</span>
+                  <span style={{ color: token.colorTextTertiary, marginLeft: 8, fontSize: 12 }}>
+                    {asset.id}
+                  </span>
                 </span>
                 {highlight !== undefined && (
                   <Tag
@@ -782,6 +847,13 @@ function formatKwh(value: number | null | undefined): string {
   return value == null ? '— kWh' : `${value.toFixed(1)} kWh`;
 }
 
+/** 订阅状态行（§8.1③）：open 态带点位数与节流口径，其余态带点位数。 */
+function streamLabel(status: StreamStatus, pointCount: number): string {
+  const count = ` · ${String(pointCount)} 点`;
+  if (status === 'open') return `SSE 订阅中 · ${String(pointCount)} 点 · 节流 2s`;
+  return `${STREAM_LABEL[status]}${count}`;
+}
+
 function KpiCard(props: {
   title: ReactNode;
   value: number | null | undefined;
@@ -792,6 +864,7 @@ function KpiCard(props: {
   onClick?: (() => void) | undefined;
   clickable?: string | undefined;
 }): ReactNode {
+  const { token } = theme.useToken();
   // 计数类（告警条数）不带小数；测量类保留 1 位
   const display =
     props.value == null
@@ -805,13 +878,18 @@ function KpiCard(props: {
       style={{
         width: 176,
         cursor: props.onClick !== undefined ? 'pointer' : undefined,
-        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+        boxShadow: token.boxShadowTertiary,
       }}
       styles={{ body: { padding: '8px 12px' } }}
       onClick={props.onClick}
     >
       <div
-        style={{ fontSize: 12, color: '#8c8c8c', display: 'flex', justifyContent: 'space-between' }}
+        style={{
+          fontSize: 12,
+          color: token.colorTextTertiary,
+          display: 'flex',
+          justifyContent: 'space-between',
+        }}
       >
         <span>{props.title}</span>
         {props.badge !== undefined && (
@@ -829,7 +907,7 @@ function KpiCard(props: {
           <span style={{ fontSize: 12, fontWeight: 400 }}> {props.unit}</span>
         ) : null}
       </div>
-      <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+      <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
         {props.placeholderNote ??
           (props.value != null && props.sub !== undefined ? props.sub : (props.clickable ?? ''))}
       </div>

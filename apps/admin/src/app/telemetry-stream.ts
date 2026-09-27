@@ -113,7 +113,9 @@ export function openTelemetryStream(
     if (closed) return;
     active = new AbortController();
     const controller = active;
-    callbacks.onStatus(attempt === 0 ? 'connecting' : 'reconnecting');
+    // 重试只发一次 reconnecting：catch 调度时已发（自测门 r1 测试建议②——
+    // 建连时再发一次会令状态行重复闪烁），此处仅首连报 connecting。
+    if (attempt === 0) callbacks.onStatus('connecting');
     try {
       const response = await fetch(
         `/api/v1/streams/telemetry?point_ids=${encodeURIComponent(pointIds.join(','))}`,

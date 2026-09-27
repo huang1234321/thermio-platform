@@ -100,6 +100,20 @@ export const EQUIPMENTS: EquipmentConditionCard[] = [
         unit_std: null,
         latest: { point_id: 102, ts: iso(0.3), value: 0, value_text: '0', quality: 0 },
       },
+      {
+        point_id: 302,
+        display_name: '机组功率',
+        quantity_type: 'power',
+        unit_std: 'kW',
+        latest: { point_id: 302, ts: iso(0.3), value: 0, value_text: null, quality: 0 },
+      },
+      {
+        point_id: 402,
+        display_name: '冷冻出水温度',
+        quantity_type: 'chw_supply_temp',
+        unit_std: '°C',
+        latest: { point_id: 402, ts: iso(0.3), value: 12.6, value_text: null, quality: 0 },
+      },
     ],
   },
   {
@@ -147,6 +161,13 @@ export const EQUIPMENTS: EquipmentConditionCard[] = [
         unit_std: null,
         latest: { point_id: 112, ts: iso(0.4), value: 0, value_text: '0', quality: 0 },
       },
+      {
+        point_id: 312,
+        display_name: '水泵功率',
+        quantity_type: 'power',
+        unit_std: 'kW',
+        latest: { point_id: 312, ts: iso(0.4), value: 0, value_text: null, quality: 0 },
+      },
     ],
   },
   {
@@ -167,6 +188,13 @@ export const EQUIPMENTS: EquipmentConditionCard[] = [
         unit_std: null,
         latest: { point_id: 121, ts: iso(0.2), value: 1, value_text: '1', quality: 0 },
       },
+      {
+        point_id: 321,
+        display_name: '水泵功率',
+        quantity_type: 'power',
+        unit_std: 'kW',
+        latest: { point_id: 321, ts: iso(0.2), value: 37.8, value_text: null, quality: 0 },
+      },
     ],
   },
   {
@@ -186,6 +214,13 @@ export const EQUIPMENTS: EquipmentConditionCard[] = [
         quantity_type: 'run_status',
         unit_std: null,
         latest: { point_id: 122, ts: iso(0.3), value: 0, value_text: '0', quality: 0 },
+      },
+      {
+        point_id: 322,
+        display_name: '水泵功率',
+        quantity_type: 'power',
+        unit_std: 'kW',
+        latest: { point_id: 322, ts: iso(0.3), value: 0, value_text: null, quality: 0 },
       },
     ],
   },
@@ -259,8 +294,19 @@ export const POINT_LATEST: Record<number, LatestValue> = {
   231: { value: 38.5, value_text: null, ts: iso(0.2), quality: 0 },
   232: { value: 0, value_text: null, ts: iso(0.3), quality: 0 },
   301: { value: 268.4, value_text: null, ts: iso(0.2), quality: 0 },
+  302: { value: 0, value_text: null, ts: iso(0.3), quality: 0 },
+  312: { value: 0, value_text: null, ts: iso(0.4), quality: 0 },
+  321: { value: 37.8, value_text: null, ts: iso(0.2), quality: 0 },
+  322: { value: 0, value_text: null, ts: iso(0.3), quality: 0 },
   401: { value: 7.2, value_text: null, ts: iso(0.2), quality: 0 },
+  402: { value: 12.6, value_text: null, ts: iso(0.3), quality: 0 },
 };
+
+/** 系统清单（§3.2 筛选白名单首项；mock 种子，real 走 GET /buildings/{id}/systems）。 */
+export const MONITOR_SYSTEMS: readonly { id: string; name: string }[] = [
+  { id: SYSTEM_CHW_ID, name: '冷冻水系统（CHW）' },
+  { id: SYSTEM_CW_ID, name: '冷却水系统（CW）' },
+];
 
 /** 告警快照 stub（M4 域未合入——IMPL-13 接缝 §8.4）。object_ids = manifest 对象。 */
 export const OPEN_ALARMS: OpenAlarm[] = [

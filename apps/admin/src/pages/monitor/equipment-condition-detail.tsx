@@ -1,8 +1,11 @@
 /**
  * 设备工况详情（M3-monitor §8.3 页面 2 · 详情）：
  * 头卡（运行态 + 在用告警最严重级）→ 关键点位实时值卡 → 历史曲线
- * （点位多选 ≤5 序列 + 粒度 raw/5min/1h，直连 M1 GET /points/{id}/telemetry
- * ——不建双入口 §3.3）→ 异常记录双 tab（告警 M4 stub / FDD M6 占位空态）。
+ * （时间范围切换 + 点位多选 ≤5 序列 + 粒度 raw/5min/1h，直连 M1
+ * GET /points/{id}/telemetry——不建双入口 §3.3）→ 异常记录双 tab
+ * （告警 M4 stub / FDD M6 占位空态）。
+ * 曲线按单位分面板绘制（每面板单 y 轴 + 时间/值刻度）——双单位共轴会把
+ * 小量程序列压平（视觉门 r1 页4-1/2）；时间格式吃 baseline §2.2 中文单语。
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -18,12 +21,20 @@ import {
   Tabs,
   Tag,
   Typography,
+  theme,
 } from 'antd';
 import type { ReactNode } from 'react';
 import { apiFetch, ApiError } from '../../app/api-client.js';
 import { TelemetryPageSchema, type TelemetryInterval } from '@thermio/shared-types';
 import type { EquipmentConditionDetail } from './api-contracts.js';
-import { MONITOR_MOCK, displayPointValue, fetchEquipmentConditionDetail } from './monitor-data.js';
+import {
+  MONITOR_MOCK,
+  fetchEquipmentConditionDetail,
+  formatStamp,
+  formatTick,
+  qualityLabel,
+  statusDisplayText,
+} from './monitor-data.js';
 
 const SERIES_COLORS = ['#0B7285', '#AD6800', '#CF1322', '#2B8A3E', '#6741D9'];
 
@@ -42,8 +53,13 @@ const SEVERITY_TAG = {
   critical: { color: 'red', label: 'critical' },
 } as const;
 
-const TREND_WINDOW_MS = 6 * 3600_000;
-/** api 单页上限（shared-types TELEMETRY_PAGE_LIMIT_MAX）；6h raw 按游标翻页取全。 */
+/** 时间范围切换（§8.2 历史曲线区块；默认近 6 小时）。 */
+const TREND_WINDOWS: ReadonlyArray<{ label: string; ms: number }> = [
+  { label: '近 1 小时', ms: 3600_000 },
+  { label: '近 6 小时', ms: 6 * 3600_000 },
+  { label: '近 24 小时', ms: 24 * 3600_000 },
+];
+/** api 单页上限（shared-types TELEMETRY_PAGE_LIMIT_MAX）；raw 按游标翻页取全。 */
 const TREND_PAGE_LIMIT = 200;
 const TREND_MAX_PAGES = 10;
 
@@ -59,15 +75,22 @@ interface TrendSeries {
   }>;
 }
 
+interface TrendFailure {
+  readonly message: string;
+  readonly requestId: string | null;
+}
+
 export function EquipmentConditionDetailPage(): ReactNode {
   const { equipmentId } = useParams<{ equipmentId: string }>();
   const navigate = useNavigate();
+  const { token } = theme.useToken();
   const [detail, setDetail] = useState<EquipmentConditionDetail | null>(null);
   const [missing, setMissing] = useState(false);
   const [series, setSeries] = useState<readonly TrendSeries[]>([]);
   const [trendLoading, setTrendLoading] = useState(false);
   const [interval, setIntervalValue] = useState<TelemetryInterval>('raw');
-  const [trendError, setTrendError] = useState<string | null>(null);
+  const [windowMs, setWindowMs] = useState(6 * 3600_000);
+  const [trendError, setTrendError] = useState<TrendFailure | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,7 +132,7 @@ export function EquipmentConditionDetailPage(): ReactNode {
     setTrendLoading(true);
     setTrendError(null);
     try {
-      const from = new Date(Date.now() - TREND_WINDOW_MS).toISOString();
+      const from = new Date(Date.now() - windowMs).toISOString();
       const loaded = await Promise.all(
         selectedPointIds.map(async (pointId) => {
           const label =
@@ -117,7 +140,7 @@ export function EquipmentConditionDetailPage(): ReactNode {
             String(pointId);
           const unit =
             pointOptions.find((item) => item.point.id === pointId)?.point.unit_std ?? null;
-          // 游标分页（API-DSN-03 { items, next_cursor }），拼齐 6h 窗口
+          // 游标分页（API-DSN-03 { items, next_cursor }），拼齐窗口
           const samples: Array<{
             ts?: string;
             bucket?: string;
@@ -144,12 +167,15 @@ export function EquipmentConditionDetailPage(): ReactNode {
         }),
       );
       setSeries(loaded);
-    } catch {
-      setTrendError('历史曲线拉取失败（TSDB 端点不可用或权限不足）');
+    } catch (cause) {
+      setTrendError({
+        message: '历史曲线拉取失败（TSDB 端点不可用或权限不足）',
+        requestId: cause instanceof ApiError ? cause.parsed.request_id : null,
+      });
     } finally {
       setTrendLoading(false);
     }
-  }, [selectedPointIds, interval, pointOptions]);
+  }, [selectedPointIds, interval, windowMs, pointOptions]);
 
   useEffect(() => {
     void loadTrend();
@@ -166,11 +192,12 @@ export function EquipmentConditionDetailPage(): ReactNode {
     );
   }
 
-  const severity = detail.alarms.items.reduce<string | null>((worst, item) => {
+  const severity = detail.alarms.items.reduce<keyof typeof SEVERITY_TAG | null>((worst, item) => {
     const rank = ['info', 'warning', 'minor', 'major', 'critical'];
     if (worst === null || rank.indexOf(item.severity) > rank.indexOf(worst)) return item.severity;
     return worst;
   }, null);
+  const windowLabel = TREND_WINDOWS.find((item) => item.ms === windowMs)?.label ?? '';
 
   return (
     <Space direction="vertical" size={16} style={{ width: '100%' }}>
@@ -193,10 +220,16 @@ export function EquipmentConditionDetailPage(): ReactNode {
           </Space>
         }
         extra={
-          <Typography.Text type="secondary">
-            {detail.equipment.local_id} · {detail.equipment.equipment_type}
-            {severity !== null ? ` · 在用告警最严 ${severity}` : ''}
-          </Typography.Text>
+          <Space size={8}>
+            <Typography.Text type="secondary">
+              {detail.equipment.local_id} · {detail.equipment.equipment_type}
+            </Typography.Text>
+            {severity !== null && (
+              <Tag color={SEVERITY_TAG[severity].color} style={{ marginInlineEnd: 0 }}>
+                在用告警最严 {SEVERITY_TAG[severity].label}
+              </Tag>
+            )}
+          </Space>
         }
       >
         <Space size={16} wrap>
@@ -207,19 +240,19 @@ export function EquipmentConditionDetailPage(): ReactNode {
               style={{ minWidth: 168 }}
               styles={{ body: { padding: '8px 12px' } }}
             >
-              <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+              <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
                 {item.point.display_name ?? item.point.raw_name}
               </div>
               <div style={{ fontSize: 20, fontWeight: 600 }}>
-                {displayPointValue(item.point.quantity_type, item.latest)}
+                {statusDisplayText(item.point.quantity_type, item.latest, detail.run_state)}
                 {item.point.unit_std !== null ? (
                   <span style={{ fontSize: 12, fontWeight: 400 }}> {item.point.unit_std}</span>
                 ) : null}
               </div>
-              <div style={{ fontSize: 12, color: '#8c8c8c' }}>
+              <div style={{ fontSize: 12, color: token.colorTextTertiary }}>
                 {item.latest === null
                   ? '暂无数据'
-                  : `更新 ${new Date(item.latest.ts).toLocaleTimeString()} · q${String(item.latest.quality)}`}
+                  : `更新 ${formatStamp(item.latest.ts)} · ${qualityLabel(item.latest.quality)}`}
               </div>
             </Card>
           ))}
@@ -227,9 +260,16 @@ export function EquipmentConditionDetailPage(): ReactNode {
       </Card>
 
       <Card
-        title="历史曲线（近 6 小时）"
+        title={`历史曲线（${windowLabel}）`}
         extra={
           <Space wrap>
+            <Segmented
+              value={windowMs}
+              onChange={(value) => {
+                setWindowMs(value);
+              }}
+              options={TREND_WINDOWS.map((item) => ({ label: item.label, value: item.ms }))}
+            />
             <Segmented
               value={interval}
               onChange={(value) => {
@@ -272,7 +312,31 @@ export function EquipmentConditionDetailPage(): ReactNode {
               </Checkbox>
             ))}
           </div>
-          {trendError !== null && <Alert type="warning" showIcon message={trendError} />}
+          {trendError !== null && (
+            <Alert
+              type="warning"
+              showIcon
+              message={trendError.message}
+              description={
+                trendError.requestId !== null ? (
+                  <Typography.Text type="secondary" style={{ fontSize: 12 }} copyable>
+                    request_id: {trendError.requestId}
+                  </Typography.Text>
+                ) : undefined
+              }
+              action={
+                <Button size="small" danger onClick={() => void loadTrend()}>
+                  重试
+                </Button>
+              }
+            />
+          )}
+          {interval === 'raw' && windowMs > 6 * 3600_000 && (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              raw 大窗口按游标上限截断（≤{String(TREND_MAX_PAGES * TREND_PAGE_LIMIT)} 点）——长窗口
+              建议切 5min/1h 聚合粒度
+            </Typography.Text>
+          )}
           {trendLoading ? (
             <div style={{ textAlign: 'center', padding: 24 }}>
               <Spin />
@@ -300,7 +364,7 @@ export function EquipmentConditionDetailPage(): ReactNode {
                         display: 'flex',
                         gap: 12,
                         padding: '6px 0',
-                        borderBottom: '1px solid #f0f0f0',
+                        borderBottom: `1px solid ${token.colorBorderSecondary}`,
                       }}
                     >
                       <Tag color={SEVERITY_TAG[item.severity].color} style={{ marginInlineEnd: 0 }}>
@@ -308,7 +372,7 @@ export function EquipmentConditionDetailPage(): ReactNode {
                       </Tag>
                       <span style={{ flex: 1 }}>{item.rule_summary}</span>
                       <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                        {new Date(item.opened_at).toLocaleString()}
+                        {formatStamp(item.opened_at)}
                       </Typography.Text>
                     </div>
                   ))
@@ -342,15 +406,17 @@ export function EquipmentConditionDetailPage(): ReactNode {
   );
 }
 
-/** 多序列内联 SVG 折线（≤5 条；零图表依赖——baseline §2 纪律，PointTrend 多序版）。 */
+/**
+ * 多序列内联 SVG 折线（≤5 条；零图表依赖——baseline §2 纪律，PointTrend 多序版）。
+ * 按单位分面板：每面板单 y 轴（好值域）+ 值刻度，x 轴统一时间刻度——不同量纲
+ * 共轴会互相压平（视觉门 r1 页4-2）。单位缺失的序列归入「其他」面板。
+ */
 function MultiTrend({ series }: { series: readonly TrendSeries[] }): ReactNode {
+  const { token } = theme.useToken();
   if (series.length === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="勾选点位后绘制（≤5 序列）" />;
   }
-  const W = 960;
-  const H = 240;
-  const PAD = 12;
-  const points = series.map((line) => ({
+  const mapped = series.map((line) => ({
     ...line,
     coords: line.samples
       .map((sample) => ({
@@ -362,52 +428,135 @@ function MultiTrend({ series }: { series: readonly TrendSeries[] }): ReactNode {
           point.y !== null && Number.isFinite(point.xMs),
       ),
   }));
-  const drawable = points.filter((line) => line.coords.length >= 2);
+  const drawable = mapped.filter((line) => line.coords.length >= 2);
   if (drawable.length === 0) {
     return <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="趋势窗口内暂无数据" />;
   }
-  const xs = drawable.flatMap((line) => line.coords.map((point) => point.xMs));
-  const ys = drawable.flatMap((line) => line.coords.map((point) => point.y));
+
+  // 单位 → 序列分组（保持首现顺序；缺单位归「—」组）
+  const groups = new Map<string, typeof drawable>();
+  for (const line of drawable) {
+    const key = line.unit ?? '—';
+    const bucket = groups.get(key);
+    if (bucket === undefined) groups.set(key, [line]);
+    else bucket.push(line);
+  }
+  return (
+    <Space direction="vertical" size={16} style={{ width: '100%' }}>
+      {[...groups.entries()].map(([unit, lines]) => (
+        <TrendPanel key={unit} unit={unit} lines={lines} token={token} />
+      ))}
+    </Space>
+  );
+}
+
+/** 单面板：单单位序列 + y 值刻度 + x 时间刻度（HH:mm）。 */
+function TrendPanel(props: {
+  unit: string;
+  lines: ReadonlyArray<{
+    pointId: number;
+    label: string;
+    coords: ReadonlyArray<{ xMs: number; y: number }>;
+  }>;
+  token: ReturnType<typeof theme.useToken>['token'];
+}): ReactNode {
+  const W = 960;
+  const H = 220;
+  const PAD_L = 56;
+  const PAD_R = 16;
+  const PAD_T = 12;
+  const PAD_B = 24;
+  const xs = props.lines.flatMap((line) => line.coords.map((point) => point.xMs));
+  const ys = props.lines.flatMap((line) => line.coords.map((point) => point.y));
   const xMin = Math.min(...xs);
   const xMax = Math.max(...xs);
   const yMin = Math.min(...ys);
   const yMax = Math.max(...ys);
   const ySpan = yMax - yMin || Math.abs(yMax) * 0.1 || 1;
+  const yPad = ySpan * 0.08;
+  const yLo = yMin - yPad;
+  const yHi = yMax + yPad;
+  const px = (xMs: number): number =>
+    PAD_L + ((xMs - xMin) / (xMax - xMin || 1)) * (W - PAD_L - PAD_R);
+  const py = (y: number): number => H - PAD_B - ((y - yLo) / (yHi - yLo)) * (H - PAD_T - PAD_B);
+
+  const yTicks = Array.from({ length: 5 }, (_, index) => yLo + ((yHi - yLo) / 4) * index);
+  const xTicks = Array.from({ length: 5 }, (_, index) => xMin + ((xMax - xMin) / 4) * index);
+
   return (
     <div>
       <svg
         viewBox={`0 0 ${String(W)} ${String(H)}`}
         role="img"
-        style={{ width: '100%', height: 240 }}
+        aria-label={`${props.unit} 面板趋势`}
+        style={{ width: '100%', height: 220 }}
       >
-        {drawable.map((line, index) => {
-          const path = line.coords
-            .map((point) => {
-              const px = PAD + ((point.xMs - xMin) / (xMax - xMin || 1)) * (W - 2 * PAD);
-              const py = H - PAD - ((point.y - yMin) / ySpan) * (H - 2 * PAD);
-              return `${px.toFixed(1)},${py.toFixed(1)}`;
-            })
-            .join(' ');
+        {/* 网格 + y 值刻度 */}
+        {yTicks.map((tick, index) => {
+          const y = py(tick);
           return (
-            <polyline
-              key={line.pointId}
-              points={path}
-              fill="none"
-              stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
-              strokeWidth="1.5"
-            />
+            <g key={`y-${String(index)}`}>
+              <line
+                x1={PAD_L}
+                x2={W - PAD_R}
+                y1={y}
+                y2={y}
+                stroke={props.token.colorBorderSecondary}
+                strokeWidth="1"
+              />
+              <text
+                x={PAD_L - 6}
+                y={y + 3}
+                textAnchor="end"
+                fontSize="10"
+                fill={props.token.colorTextTertiary}
+              >
+                {formatTickValue(tick)}
+              </text>
+            </g>
           );
         })}
+        {/* x 时间刻度 */}
+        {xTicks.map((tick, index) => (
+          <text
+            key={`x-${String(index)}`}
+            x={px(tick)}
+            y={H - 6}
+            textAnchor={index === 0 ? 'start' : index === 4 ? 'end' : 'middle'}
+            fontSize="10"
+            fill={props.token.colorTextTertiary}
+          >
+            {formatTick(new Date(tick).toISOString())}
+          </text>
+        ))}
+        {props.lines.map((line, index) => (
+          <polyline
+            key={line.pointId}
+            points={line.coords
+              .map((point) => `${px(point.xMs).toFixed(1)},${py(point.y).toFixed(1)}`)
+              .join(' ')}
+            fill="none"
+            stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
+            strokeWidth="1.5"
+          />
+        ))}
       </svg>
       <Space size={16} wrap style={{ fontSize: 12 }}>
-        {drawable.map((line, index) => (
+        {props.lines.map((line, index) => (
           <span key={line.pointId}>
             <span style={{ color: SERIES_COLORS[index % SERIES_COLORS.length] }}>━</span>{' '}
             {line.label}
-            {line.unit !== null ? ` (${line.unit})` : ''}
+            {props.unit !== '—' ? ` (${props.unit})` : ''}
           </span>
         ))}
       </Space>
     </div>
   );
+}
+
+/** y 刻度值：小数自适应（跨度 <4 保留 1 位，否则整数）。 */
+function formatTickValue(value: number): string {
+  return Math.abs(value) < 100 && !Number.isInteger(value)
+    ? value.toFixed(1)
+    : String(Math.round(value));
 }

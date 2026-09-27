@@ -37,14 +37,14 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
         "ALARM_STATE_INVALID": "alarm.state_invalid",
         "BUILDING_NAME_REQUIRED": "common.validation_failed",
         "BUILDING_NOT_FOUND": "asset.not_found",
-        "CONFLICT": "common.conflict",
+        "CONFLICT": "common.version_conflict",
         "CONTROL_MODE_POINT_NOT_CONTROLLABLE": "point.control_mode_point_not_controllable",
         "CONTROL_MODE_SAME": "point.control_mode_same",
         "CONTROL_MODE_TRANSITION_INVALID": "point.control_mode_transition_invalid",
         "CREDENTIAL_LIMIT_EXCEEDED": "credential.limit_exceeded",
         "CREDENTIAL_NOT_FOUND": "credential.not_found",
         "EQUIPMENT_LOCAL_ID_DUPLICATE": "asset.local_id_duplicate",
-        "EQUIPMENT_TYPE_UNKNOWN": "asset.equipment_type_unknown",
+        "EQUIPMENT_TYPE_UNKNOWN": "equipment_type.unknown",
         "FDD_FINDING_NOT_FOUND": "fdd.finding_not_found",
         "FDD_REPORT_NOT_FOUND": "fdd.report_not_found",
         "FORBIDDEN": "auth.forbidden",
@@ -76,7 +76,7 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
         "PROPOSAL_PAYLOAD_INVALID": "proposal.payload_invalid",
         "PROPOSAL_STATE_INVALID": "proposal.state_invalid",
         "PROPOSAL_VERIFY_FAILED": "proposal.verify_failed",
-        "QUANTITY_TYPE_UNKNOWN": "point.quantity_type_unknown",
+        "QUANTITY_TYPE_UNKNOWN": "quantity_type.unknown",
         "RATE_LIMITED": "common.rate_limited",
         "REFRESH_REVOKED": "auth.refresh_revoked",
         "ROLE_UNKNOWN": "role.unknown",
@@ -87,7 +87,7 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
         "STREAM_LIMIT_EXCEEDED": "stream.limit_exceeded",
         "SUPPRESS_DURATION_INVALID": "alarm.suppress_duration_invalid",
         "SYSTEM_NOT_FOUND": "asset.not_found",
-        "SYSTEM_TYPE_UNKNOWN": "asset.system_type_unknown",
+        "SYSTEM_TYPE_UNKNOWN": "system_type.unknown",
         "TELEMETRY_RANGE_INVALID": "telemetry.range_invalid",
         "TOKEN_EXPIRED": "auth.token_expired",
         "UNAUTHENTICATED": "auth.unauthenticated",
@@ -125,10 +125,7 @@ describe('双名收口（DAT-92 评审建议 1：同义异名以 seed 为准）'
 
 describe('域归属定档（DAT-92 评审建议 2：未定档码逐条钉死）', () => {
   it('shouldPinTheThreeReviewNamedCodes_toTheirDecidedDomains', () => {
-    // IMPL-11（M1-asset §1.3）落码值：quantity_type 归点位域 point.quantity_type_unknown。
-    expect(OVERVIEW_DESIGN_CODE_ALIASES['QUANTITY_TYPE_UNKNOWN']).toBe(
-      'point.quantity_type_unknown',
-    );
+    expect(OVERVIEW_DESIGN_CODE_ALIASES['QUANTITY_TYPE_UNKNOWN']).toBe('quantity_type.unknown');
     expect(OVERVIEW_DESIGN_CODE_ALIASES['CREDENTIAL_LIMIT_EXCEEDED']).toBe(
       'credential.limit_exceeded',
     );
@@ -136,20 +133,17 @@ describe('域归属定档（DAT-92 评审建议 2：未定档码逐条钉死）'
   });
 
   it('shouldPinTheEnumValidationFamily_eachEnumAsItsOwnDomain', () => {
-    // IMPL-11（M1-asset §1.2/§1.3）落码值：system/equipment 枚举码归资产域 asset.*
-    // （规式第 4 条跨实体资源类优先；DAT-102 草案的独立小域名已随种子注册收口）。
-    expect(OVERVIEW_DESIGN_CODE_ALIASES['SYSTEM_TYPE_UNKNOWN']).toBe('asset.system_type_unknown');
-    expect(OVERVIEW_DESIGN_CODE_ALIASES['EQUIPMENT_TYPE_UNKNOWN']).toBe(
-      'asset.equipment_type_unknown',
-    );
+    // 枚举取值校验类逐条定档：各枚举独立域 `<枚举名小写>.unknown`，不并入 asset.*/user.*。
+    expect(OVERVIEW_DESIGN_CODE_ALIASES['SYSTEM_TYPE_UNKNOWN']).toBe('system_type.unknown');
+    expect(OVERVIEW_DESIGN_CODE_ALIASES['EQUIPMENT_TYPE_UNKNOWN']).toBe('equipment_type.unknown');
     expect(OVERVIEW_DESIGN_CODE_ALIASES['ROLE_UNKNOWN']).toBe('role.unknown');
   });
 
   it('shouldPinTheGenericTableCodes_toCommonDomainDrafts', () => {
-    // overview §2 通用表（无业务域）→ common.*；CONFLICT 承载限定收口为 point
-    // If-Match 弱校验（M1-asset §1.3/R4），目标随 IMPL-11 注册为 common.conflict；
+    // overview §2 通用表（无业务域）→ common.*；两码为本批（DAT-102）补齐的缺项：
+    // CONFLICT 语义是乐观并发（版本不符）→ 宁具体勿泛化取 version_conflict；
     // RATE_LIMITED 目标码是 platform.md §6 限流节明示的骨架码原字。
-    expect(OVERVIEW_DESIGN_CODE_ALIASES['CONFLICT']).toBe('common.conflict');
+    expect(OVERVIEW_DESIGN_CODE_ALIASES['CONFLICT']).toBe('common.version_conflict');
     expect(OVERVIEW_DESIGN_CODE_ALIASES['RATE_LIMITED']).toBe('common.rate_limited');
   });
 });
@@ -185,11 +179,18 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "ALARM_RULE_PARAMS_INVALID",
           "ALARM_RULE_SCOPE_INVALID",
           "ALARM_STATE_INVALID",
+          "CONFLICT",
           "CONTROL_MODE_POINT_NOT_CONTROLLABLE",
           "CONTROL_MODE_SAME",
           "CONTROL_MODE_TRANSITION_INVALID",
+          "CREDENTIAL_LIMIT_EXCEEDED",
+          "CREDENTIAL_NOT_FOUND",
+          "EQUIPMENT_LOCAL_ID_DUPLICATE",
+          "EQUIPMENT_TYPE_UNKNOWN",
           "FDD_FINDING_NOT_FOUND",
           "FDD_REPORT_NOT_FOUND",
+          "GATEWAY_NOT_FOUND",
+          "GATEWAY_SERIAL_DUPLICATE",
           "GATE_CLAMP_RANGE_INVALID",
           "GATE_CONTROLLABLE_REQUIRES_CLAMP",
           "GATE_RATE_INVALID",
@@ -199,49 +200,42 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "IMPORT_NOT_FOUND",
           "IMPORT_STATE_INVALID",
           "IMPORT_TEMPLATE_MISMATCH",
+          "POINT_FIELD_NOT_ALLOWED",
           "POINT_INACTIVE",
           "PROPOSAL_EXPIRED",
           "PROPOSAL_NOT_FOUND",
           "PROPOSAL_PAYLOAD_INVALID",
           "PROPOSAL_STATE_INVALID",
           "PROPOSAL_VERIFY_FAILED",
+          "QUANTITY_TYPE_UNKNOWN",
           "SCENE_NOT_FOUND",
           "SELFCHECK_NOT_READY",
           "STREAM_LIMIT_EXCEEDED",
           "SUPPRESS_DURATION_INVALID",
+          "SYSTEM_TYPE_UNKNOWN",
           "UNIT_CONVERSION_UNSUPPORTED",
         ],
         "registered": [
           "ALARM_RULE_NOT_FOUND",
           "BUILDING_NAME_REQUIRED",
           "BUILDING_NOT_FOUND",
-          "CONFLICT",
-          "CREDENTIAL_LIMIT_EXCEEDED",
-          "CREDENTIAL_NOT_FOUND",
-          "EQUIPMENT_LOCAL_ID_DUPLICATE",
-          "EQUIPMENT_TYPE_UNKNOWN",
           "FORBIDDEN",
-          "GATEWAY_NOT_FOUND",
-          "GATEWAY_SERIAL_DUPLICATE",
           "INTERNAL_ERROR",
           "LOGIN_FAILED",
           "NOT_FOUND",
           "PASSWORD_POLICY_FAILED",
-          "POINT_FIELD_NOT_ALLOWED",
           "POINT_NOT_FOUND",
           "POINT_NO_DATA",
           "PROPOSAL_GATE_CONFLICT_QUEUED",
           "PROPOSAL_GATE_RATE_LIMITED",
           "PROPOSAL_GATE_SYSTEM_FUSED",
           "PROPOSAL_GATE_WHITELIST_DENIED",
-          "QUANTITY_TYPE_UNKNOWN",
           "RATE_LIMITED",
           "REFRESH_REVOKED",
           "ROLE_UNKNOWN",
           "SCOPE_BUILDING_MISMATCH",
           "SERVICE_UNAUTHORIZED",
           "SYSTEM_NOT_FOUND",
-          "SYSTEM_TYPE_UNKNOWN",
           "TELEMETRY_RANGE_INVALID",
           "TOKEN_EXPIRED",
           "UNAUTHENTICATED",

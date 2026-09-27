@@ -22,24 +22,13 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
 // 能力目录（v1）
 // ---------------------------------------------------------------------------
 
-/**
- * 能力目录 v1（ui/baseline.md §1.1 能力键列；只增不删，API-CT-02）。
- *
- * IMPL-11 增量（M7-auth §4.1 定稿键名逐字，M1-asset §1.5 v1.1 对齐）：
- * assets.write / points.semantics.write / points.status.write / gateways.manage
- * ——IMPL-10（/me 下发）与 IMPL-11（@RequireCapabilities）同源消费本目录。
- * points.physical.write（§3.10，R17 定稿）随 DAT-151 落码注册，本批不含。
- */
+/** 能力目录 v1（ui/baseline.md §1.1 能力键列；只增不删，API-CT-02）。 */
 export const CAPABILITIES = [
   'monitor.read',
   'alarms.read',
   'proposals.read',
   'fdd.read',
   'assets.read',
-  'assets.write',
-  'points.semantics.write',
-  'points.status.write',
-  'gateways.manage',
   'imports.read',
   'imports.write',
   'control.read',
@@ -49,12 +38,8 @@ export const CAPABILITIES = [
 export type Capability = (typeof CAPABILITIES)[number];
 export const CapabilitySchema = z.enum(CAPABILITIES);
 
-/**
- * 能力键形状：小写蛇形段以点分层（`<domain>[.<sub>]*.<verb>`）。M7-auth §4.1 定稿
- * 含多段键（points.semantics.write 等），IMPL-10 期的单点形状随之放宽——段内字符
- * 规则不变（M1-asset §1.5 v1.1 对齐 M7 定稿键名）。
- */
-export const CAPABILITY_PATTERN = /^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/;
+/** 能力键形状：`<domain>.<verb>` 小写点分（与 reason_code 的 domain 段同构）。 */
+export const CAPABILITY_PATTERN = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
 
 /**
  * /me 的 capabilities 用 string[] 而非闭合 enum：服务端可先下发新能力键、
@@ -77,22 +62,11 @@ const VIEWER_CAPABILITIES: readonly Capability[] = [
 
 /**
  * 角色 → 能力推导表（overview §7 权限矩阵；服务端唯一推导点，UI 不得复制此表本地推断）。
- * IMPL-11 增量：operator + points.semantics.write（M7 §4.1）；admin +
- * assets.write / points.status.write / gateways.manage（M7 §4.1 定稿列）。
  */
 export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = {
   viewer: VIEWER_CAPABILITIES,
-  operator: [...VIEWER_CAPABILITIES, 'imports.write', 'points.semantics.write'],
-  admin: [
-    ...VIEWER_CAPABILITIES,
-    'imports.write',
-    'points.semantics.write',
-    'assets.write',
-    'points.status.write',
-    'gateways.manage',
-    'control.write',
-    'users.manage',
-  ],
+  operator: [...VIEWER_CAPABILITIES, 'imports.write'],
+  admin: [...VIEWER_CAPABILITIES, 'imports.write', 'control.write', 'users.manage'],
 };
 
 /** 按角色推导能力清单（服务端 /me 与守卫共用；SEC-AZ-05 唯一推导入口）。 */

@@ -10,7 +10,6 @@ import type { TelemetryAggregateSample, TelemetryRawSample } from '@thermio/shar
 import type { Pool, QueryResultRow } from 'pg';
 import {
   buildAggregateQuery,
-  buildLatestBatchQuery,
   buildLatestQuery,
   buildRawQuery,
   type IntervalWindow,
@@ -23,11 +22,6 @@ interface RawRow extends QueryResultRow {
   value: number | null;
   value_text: string | null;
   quality: number;
-}
-
-/** 批量 latest 行（IMPL-11 列表快照；DISTINCT ON 保留每点最近一行）。 */
-interface LatestBatchRow extends RawRow {
-  point_id: string | number;
 }
 
 /** 聚合桶行（ddl.md §11.2；stddev_samp 单样本桶为 NULL）。 */
@@ -46,8 +40,6 @@ interface AggregateRow extends QueryResultRow {
 /** TSDB 读出口（真连 / 停用两形由 TelemetryModule 工厂决定）。 */
 export interface TelemetryStore {
   latest(pointId: number): Promise<TelemetryRawSample | null>;
-  /** 批量 latest（IMPL-11 点位列表快照）：point_id → 最近行；无数据点位不出现在映射。 */
-  latestBatch(pointIds: readonly number[]): Promise<Map<number, TelemetryRawSample>>;
   listRaw(window: IntervalWindow): Promise<TelemetryRawSample[]>;
   listAggregate(
     interval: '5min' | '1h',
@@ -66,17 +58,6 @@ export class TsdbReadRepository implements TelemetryStore {
     const rows = await this.run<RawRow>(query.text, query.values);
     const first = rows[0];
     return first === undefined ? null : toRawSample(first);
-  }
-
-  async latestBatch(pointIds: readonly number[]): Promise<Map<number, TelemetryRawSample>> {
-    if (pointIds.length === 0) return new Map();
-    const query = buildLatestBatchQuery(pointIds);
-    const rows = await this.run<LatestBatchRow>(query.text, query.values);
-    const latest = new Map<number, TelemetryRawSample>();
-    for (const row of rows) {
-      latest.set(Number(row.point_id), toRawSample(row));
-    }
-    return latest;
   }
 
   async listRaw(window: IntervalWindow): Promise<TelemetryRawSample[]> {
@@ -141,7 +122,6 @@ export function disabledTelemetryStore(reason: string): TelemetryStore {
     Promise.reject(new TelemetryStoreUnavailableError(reason));
   return {
     latest: unavailable,
-    latestBatch: unavailable,
     listRaw: unavailable,
     listAggregate: unavailable,
   };

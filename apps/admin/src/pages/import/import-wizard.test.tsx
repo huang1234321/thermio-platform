@@ -121,13 +121,18 @@ async function renderWizard(): Promise<void> {
       <ImportWizardPage jobId="j1" />
     </MemoryRouter>,
   );
-  // 续入装载（详情 + 行 + 装备候选）完成、步骤 5 呈现
-  await waitFor(() => {
-    expect(screen.getByText('采集自检（全点位读一遍 → 命中率报告）')).toBeTruthy();
-  });
+  // 续入装载（详情 + 行 + 装备候选）完成、步骤 5 呈现。
+  // 显式宽预算（CI 慢机：antd 装载 + 串行 mock 请求 + 首帧渲染；默认 1s 会假红——
+  // QA 第 3 轮 CI 阻塞根因之一）
+  await waitFor(
+    () => {
+      expect(screen.getByText('采集自检（全点位读一遍 → 命中率报告）')).toBeTruthy();
+    },
+    { timeout: 15_000, interval: 200 },
+  );
 }
 
-describe('自检按钮 in-flight 标志（QA 阻塞 #2 回归）', () => {
+describe('自检按钮 in-flight 标志（QA 阻塞 #2 回归）', { timeout: 45_000 }, () => {
   beforeEach(() => {
     apiFetchMock.mockReset();
     apiFetchMock.mockImplementation((path: string) => Promise.resolve(scriptApiFetch(path)));
@@ -137,13 +142,20 @@ describe('自检按钮 in-flight 标志（QA 阻塞 #2 回归）', () => {
     cleanup();
   });
 
-  /** 真实定时器等一轮轮询（1.5s 间隔 + 余量；fake timers 会断 antd 事件链，不用）。 */
-  async function waitForNextPoll(): Promise<void> {
-    await act(async () => {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 1_700);
-      });
-    });
+  /**
+   * 终态条件等待（替代固定 1.7s sleep——CI 慢机单轮轮询可能远超预算，固定 sleep
+   * 在快机浪费、慢机不够；轮询按自身 1.5s 节奏推进，这里只认终态，预算 20s）。
+   * fake timers 会断 antd 事件链，维持真实定时器。
+   */
+  async function waitForButtonState(nameRegex: RegExp, expectLoading: boolean): Promise<void> {
+    await waitFor(
+      () => {
+        const button = screen.getByRole('button', { name: nameRegex });
+        const loading = button.getAttribute('class')?.includes('ant-btn-loading') ?? false;
+        expect(loading).toBe(expectLoading);
+      },
+      { timeout: 20_000, interval: 200 },
+    );
   }
 
   it('shouldKeepButtonAlive_atAppliedRestingState（修复前：loading 恒 true 死锁）', async () => {
@@ -170,13 +182,10 @@ describe('自检按钮 in-flight 标志（QA 阻塞 #2 回归）', () => {
       screen.getByRole('button', { name: /发起采集自检|重跑自检/ }).getAttribute('class'),
     ).toContain('ant-btn-loading');
 
-    // 完成信号：轮询观察到 checked ∧ checked_at 前进（首轮 null → T1）
+    // 完成信号：轮询观察到 checked ∧ checked_at 前进（首轮 null → T1）——
+    // 终态等待（按钮换文案「重跑自检」且退出 loading）
     jobState = appliedJob('2026-09-27T05:20:00Z');
-    await waitForNextPoll();
-    await waitFor(() => {
-      const after = screen.getByRole('button', { name: /重跑自检（刷新命中率）/ });
-      expect(after.getAttribute('class')).not.toContain('ant-btn-loading');
-    });
+    await waitForButtonState(/重跑自检（刷新命中率）/, false);
     // 报告视图可达（阻塞 #2 的另一半）：报告卡 + missed 清单渲染
     expect(screen.getByText(/自检报告（/)).toBeTruthy();
     // 展示口径 = Excel 行号（row_no + 1，§2.2 注记）：row_no 4 → 第 5 行
@@ -186,10 +195,13 @@ describe('自检按钮 in-flight 标志（QA 阻塞 #2 回归）', () => {
   it('shouldSupportRerun_checkedToChecked_byCheckedAtAdvance', async () => {
     jobState = appliedJob('2026-09-27T05:20:00Z');
     await renderWizard();
-    // 续入即 checked：报告自动可达
-    await waitFor(() => {
-      expect(screen.getByText(/自检报告（/)).toBeTruthy();
-    });
+    // 续入即 checked：报告自动可达（宽预算同上）
+    await waitFor(
+      () => {
+        expect(screen.getByText(/自检报告（/)).toBeTruthy();
+      },
+      { timeout: 15_000, interval: 200 },
+    );
 
     const rerun = screen.getByRole('button', { name: /重跑自检（刷新命中率）/ });
     await act(async () => {
@@ -202,14 +214,9 @@ describe('自检按钮 in-flight 标志（QA 阻塞 #2 回归）', () => {
       screen.getByRole('button', { name: /重跑自检（刷新命中率）/ }).getAttribute('class'),
     ).toContain('ant-btn-loading');
 
-    // checked_at 前进（T1 → T2）→ 解锁 + 报告按新 checked_at 重拉
+    // checked_at 前进（T1 → T2）→ 解锁 + 报告按新 checked_at 重拉（终态等待）
     jobState = appliedJob('2026-09-27T05:30:00Z');
-    await waitForNextPoll();
-    await waitFor(() => {
-      expect(
-        screen.getByRole('button', { name: /重跑自检（刷新命中率）/ }).getAttribute('class'),
-      ).not.toContain('ant-btn-loading');
-    });
+    await waitForButtonState(/重跑自检（刷新命中率）/, false);
     expect(screen.getByText(/自检报告（/)).toBeTruthy();
   });
 });

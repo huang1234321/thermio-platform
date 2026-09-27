@@ -106,6 +106,12 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
   const [selfReport, setSelfReport] = useState<SelfCheckReport | null>(null);
   /** 自检真实 in-flight 标志（QA 阻塞 #2：loading 绑作业状态会把 applied 休息态锁死按钮）。 */
   const [selfCheckPending, setSelfCheckPending] = useState(false);
+  /**
+   * pending 的 ref 镜像：轮询回调内**同步** check-and-clear——状态更新在 rerender
+   * 前不反映到旧闭包，相邻两轮轮询会以 pending=true 二次触发守卫（连弹两条相同
+   * warning，QA 第 3 轮探针发现）；ref 写入即时生效，天然免重入。
+   */
+  const selfCheckPendingRef = useRef(false);
   /** 自检派发时点的 checked_at 锚（首轮 null；完成信号 = checked_at 前进，checked→checked 重跑同判）。 */
   const selfCheckDispatchedAt = useRef<string | null>(null);
   /** 派发时刻（ms）：卡死守卫——服务端内部失败不产生状态跳变时解除按钮锁（重试安全：单飞幂等）。 */
@@ -206,12 +212,16 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
           void loadRows(fresh.id);
         }
         // 自检完成信号（§4.3 状态跳变 + 摘要字段）：checked_at 前进 → 清 pending、拉报告
+        // （pending 判定/清零走 ref 镜像：同步 check-and-clear，防相邻轮询在 rerender
+        // 前以旧闭包 pending=true 重入——守卫连弹两条相同 warning，QA 第 3 轮探针发现）
         if (fresh.status === 'failed') {
+          selfCheckPendingRef.current = false;
           setSelfCheckPending(false);
           return;
         }
         if (fresh.status === 'checked' && fresh.checked_at !== null) {
-          if (selfCheckPending && fresh.checked_at !== selfCheckDispatchedAt.current) {
+          if (selfCheckPendingRef.current && fresh.checked_at !== selfCheckDispatchedAt.current) {
+            selfCheckPendingRef.current = false;
             setSelfCheckPending(false);
           }
           void loadSelfReport(fresh.id, fresh.checked_at);
@@ -219,10 +229,11 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
         }
         // 卡死守卫：pending 超 5 min 无状态跳变（服务端统计失败不迁移作业态）→ 解锁可重试
         if (
-          selfCheckPending &&
+          selfCheckPendingRef.current &&
           fresh.status === 'applied' &&
           Date.now() - selfCheckDispatchedMs.current > 5 * 60 * 1000
         ) {
+          selfCheckPendingRef.current = false; // 先占位防相邻轮次重入，再弹提示
           setSelfCheckPending(false);
           void message.warning(
             '自检长时间未返回，已解除按钮锁——可重试（服务端单飞幂等，不会并发两轮）',
@@ -373,6 +384,7 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
     if (job === null || selfCheckPending) return;
     selfCheckDispatchedAt.current = job.checked_at; // 完成信号锚（首轮 null → 非空；重跑 → 前进）
     selfCheckDispatchedMs.current = Date.now();
+    selfCheckPendingRef.current = true;
     setSelfCheckPending(true);
     try {
       await apiFetch(`/imports/${job.id}/self-check`, ImportJobSchema, {
@@ -382,6 +394,7 @@ export function ImportWizardPage({ jobId }: { jobId?: string | undefined }): Rea
       void message.success('自检已发起（202）：读指令下发 → 采集窗等待 → 统计中…');
       await loadJob(job.id);
     } catch (cause) {
+      selfCheckPendingRef.current = false;
       setSelfCheckPending(false); // 受理失败即可重试（服务端单飞幂等 202，不冲突）
       void message.error(errorText(cause, '自检发起失败'));
     }

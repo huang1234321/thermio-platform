@@ -79,6 +79,8 @@ export async function doRefresh(): Promise<LoginResponse> {
 export interface ApiCallOptions {
   readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   readonly body?: unknown;
+  /** 附加请求头（如 apply 必带的 Idempotency-Key，M2-import §3.8）。 */
+  readonly headers?: Record<string, string>;
   /** 内部重放标记（自动刷新一次，不无限递归）。 */
   readonly retried?: boolean;
 }
@@ -96,6 +98,7 @@ export async function apiFetch<TSchema>(
       ...(tokenStore.accessToken !== null
         ? { authorization: `Bearer ${tokenStore.accessToken}` }
         : {}),
+      ...(options.headers ?? {}),
     },
   };
   if (options.body !== undefined) {
@@ -126,6 +129,38 @@ export async function apiFetch<TSchema>(
   const parsed = schema.safeParse(await response.json());
   if (!parsed.success) {
     // API-CT-03 宽松回退：整体解析失败降级错误态并上报，不裸断言
+    throw new ApiError(response.status, {
+      reason_code: 'common.internal_error',
+      message: GENERIC_FALLBACK_MESSAGE,
+      request_id: null,
+      details: null,
+      known: false,
+    });
+  }
+  return parsed.data;
+}
+
+/**
+ * multipart 上传入口（M2-import §3.1）：FormData 由浏览器补 boundary（不手设
+ * content-type）；Bearer 注入与错误信封归一复用 apiFetch 同款纪律，响应同样 safeParse。
+ */
+export async function apiUpload<TSchema>(
+  path: string,
+  form: FormData,
+  schema: { safeParse: (input: unknown) => { success: true; data: TSchema } | { success: false } },
+): Promise<TSchema> {
+  const init: RequestInit = {
+    method: 'POST',
+    headers:
+      tokenStore.accessToken !== null ? { authorization: `Bearer ${tokenStore.accessToken}` } : {},
+    body: form,
+  };
+  const response = await fetch(`/api/v1${path}`, init);
+  if (!response.ok) {
+    throw await parseEnvelopeError(response);
+  }
+  const parsed = schema.safeParse(await response.json());
+  if (!parsed.success) {
     throw new ApiError(response.status, {
       reason_code: 'common.internal_error',
       message: GENERIC_FALLBACK_MESSAGE,

@@ -87,11 +87,12 @@ export class QualityEventConsumer {
       });
     });
     await this.consumer.run({
-      eachMessage: (payload: EachMessagePayload): Promise<void> => {
-        void this.handle(payload).catch((err: unknown) => {
+      // await 保序（DAT-116 评审 #1 转接）：分区序内逐条处理完成再取下一条，
+      // 失败仍不外抛（eachMessage 抛错断消费循环），ERROR 留痕 + 重启 2h 重放兜底
+      eachMessage: async (payload: EachMessagePayload): Promise<void> => {
+        await this.handle(payload).catch((err: unknown) => {
           this.logger.error({ msg: 'quality_event_process_failed', err });
         });
-        return Promise.resolve();
       },
     });
     this.logger.info({ msg: 'quality_consumer_started', topic: TOPIC_TELEMETRY_QUALITY });

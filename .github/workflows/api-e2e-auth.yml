@@ -78,7 +78,13 @@ jobs:
           "$(go env GOPATH)/bin/goose" -dir db/migrations/pg postgres \
             "postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
 
-      - name: Run api e2e（auth + tenant RLS，验收要点载体）
+      # dist 冒烟前置（QA 阻塞 #1 回归钉）：turbo test 只构建依赖（^build）不构建
+      # api 自身 dist——显式 build 使 test/import-dist.smoke.e2e.test.ts 的门通过，
+      # 编译产物真实运行时（node dist/main.js 上传→解析）进 CI 面。
+      - name: Build api dist（dist 冒烟前置）
+        run: pnpm --filter @thermio/api... run build
+
+      - name: Run api e2e（auth + tenant RLS + dist 冒烟，验收要点载体）
         env:
           PG_E2E_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable
           PG_E2E_API_URL: postgres://thermio_api:${{ env.THERMIO_API_PW }}@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable

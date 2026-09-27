@@ -48,6 +48,7 @@ import {
   type ProposalJoinedRow,
 } from './proposal-shared.js';
 import { buildPrecheck } from './precheck.js';
+import { ControlDispatcherService } from '../control-safety/dispatcher.service.js';
 
 @Injectable()
 export class ProposalsService {
@@ -56,6 +57,7 @@ export class ProposalsService {
   constructor(
     @Inject(TENANT_DB) private readonly tenantDb: TenantDb | null,
     @Inject(LOGGER) rootLogger: Logger,
+    @Inject(ControlDispatcherService) private readonly dispatcher: ControlDispatcherService | null,
   ) {
     this.logger = rootLogger.child({ component: 'proposal-approvals' });
   }
@@ -275,6 +277,11 @@ export class ProposalsService {
     comment: string | undefined,
   ): Promise<ProposalApproveResponse> {
     const result = await this.decide(actor, proposalId, 'approve');
+    // IMPL-18 接通：approve 落库后即时 kick 仲裁链（T1 受理快查 + 入队 + 派发
+    // 尝试；10s 扫描兜底）。fire-and-forget——202 语义不变，仲裁异步推进。
+    if (result.status === 'approved' && this.dispatcher !== null) {
+      void this.dispatcher.onApproved(actor.tenant_id, proposalId);
+    }
     // R1 过渡态：comment 仅入结构化日志（decided_reason 落列前不持久化）
     if (comment !== undefined && comment.length > 0) {
       this.logger.info({

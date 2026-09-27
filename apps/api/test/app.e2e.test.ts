@@ -113,16 +113,12 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
       expect(res.text).toContain('svc_http_request_duration_ms');
       expect(res.text).toContain('thermio_gate_rejections_total');
       expect(res.text).toContain('thermio_proposal_decisions_total');
-      // 五闸门 label 预热零值（§5.2 咬合：label = gate_* cause 子串）
-      for (const gate of [
-        'gate_not_whitelisted',
-        'gate_clamped',
-        'gate_rate_limited',
-        'gate_conflict',
-        'gate_circuit_open',
-      ]) {
-        expect(res.text).toContain(`gate="${gate}"`);
+      // 闸门 label 预热零值（§5.2 v1.5〔R1，DAT-132〕：label = cause 的闸门子串，
+      // whitelist/rate/conflict/fuse 走 rejections；clamp 非拒绝走独立计数器）
+      for (const gate of ['whitelist', 'rate', 'conflict', 'fuse']) {
+        expect(res.text).toContain(`thermio_gate_rejections_total{gate="${gate}"}`);
       }
+      expect(res.text).toContain('thermio_gate_clamped_total{gate="clamp"}');
     });
   });
 
@@ -190,7 +186,7 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
       });
 
       const metrics = await request(app.getHttpServer()).get('/metrics').expect(200);
-      expect(metrics.text).toContain('thermio_gate_rejections_total{gate="gate_rate_limited"} 1');
+      expect(metrics.text).toContain('thermio_gate_rejections_total{gate="rate"} 1');
     });
   });
 
@@ -209,7 +205,7 @@ describe('api skeleton e2e（platform.md §5.1/§5.4）', () => {
       expect(res.body.error.request_id).toMatch(/^req_[0-9a-f]{32}$/);
 
       const metrics = await request(app.getHttpServer()).get('/metrics').expect(200);
-      expect(metrics.text).toContain('thermio_gate_rejections_total{gate="gate_clamped"} 1');
+      expect(metrics.text).toContain('thermio_gate_clamped_total{gate="clamp"} 1');
     });
   });
 

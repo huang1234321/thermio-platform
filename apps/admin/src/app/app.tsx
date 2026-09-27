@@ -26,6 +26,11 @@ import { ProposalsPage } from '../pages/proposal/proposals-page.js';
 import { ProposalDetailPage } from '../pages/proposal/proposal-detail-page.js';
 import { ProposalExecutionPage } from '../pages/proposal/proposal-execution-page.js';
 import { ControlAuditPage } from '../pages/proposal/control-audit-page.js';
+import { ControlPointsPage } from '../pages/control/control-points-page.js';
+import { GateEditPage } from '../pages/control/gate-edit-page.js';
+import { ModeChangePage } from '../pages/control/mode-change-page.js';
+import { ConfigAuditPage } from '../pages/control/config-audit-page.js';
+import { FusePage } from '../pages/control/fuse-page.js';
 import { AlarmDetailPage } from '../pages/alarm/alarm-detail-page.js';
 import { AlarmRulesPage } from '../pages/alarm/alarm-rules-page.js';
 import { AlarmSuppressionsPage } from '../pages/alarm/alarm-suppressions-page.js';
@@ -65,7 +70,6 @@ function RequireCapability({ capability }: { capability: Capability }): ReactNod
 
 const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
   { path: '/fdd', title: 'FDD 报告（M6）' },
-  { path: '/control/points', title: '控制安全（M8）' },
 ];
 
 export function App(): ReactNode {
@@ -105,6 +109,16 @@ export function App(): ReactNode {
               <Route path="/proposals/:proposalId" element={<ProposalDetailPage />} />
               <Route path="/proposals/:proposalId/execution" element={<ProposalExecutionPage />} />
               <Route path="/control-audit" element={<ControlAuditPage />} />
+            </Route>
+            {/* 控制安全组（M8-safety-ui §2.1：5 页路由，读 control.read / 写 control.write） */}
+            <Route element={<RequireCapability capability="control.read" />}>
+              <Route path="/control/points" element={<ControlPointsPage />} />
+              <Route element={<RequireCapability capability="control.write" />}>
+                <Route path="/control/points/:pointId/gate" element={<GateEditPage />} />
+                <Route path="/control/points/:pointId/mode" element={<ModeChangePage />} />
+              </Route>
+              <Route path="/control/config-audit" element={<ConfigAuditPage />} />
+              <Route path="/control/fuse" element={<FusePage />} />
             </Route>
             {/* 资产组（M1-asset §7：6 页路由 + 能力显隐） */}
             <Route element={<RequireCapability capability="assets.read" />}>

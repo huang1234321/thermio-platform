@@ -9,3 +9,4 @@ export * from './alarm.js';
 export * from './monitor.js';
 export * from './fdd.js';
 export * from './import.js';
+export * from './control-safety.js';

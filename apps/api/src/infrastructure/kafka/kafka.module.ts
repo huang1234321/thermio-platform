@@ -126,5 +126,7 @@ function disabledPublisher(logger: PinoLogger): KafkaPublisherPort {
     disconnect: () => Promise.resolve(),
     publishProposal: () =>
       Promise.reject(new Error('kafka disabled: KAFKA_BROKERS not configured')),
+    publishControlExecuted: () =>
+      Promise.reject(new Error('kafka disabled: KAFKA_BROKERS not configured')),
   };
 }

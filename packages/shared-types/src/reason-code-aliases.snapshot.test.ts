@@ -24,7 +24,7 @@ const LOWER_SNAKE_DOMAIN_CAUSE = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
  * platform.md 全文反引号大写码逐条对照后的 reason_code 清单共 65 条，本表须逐一覆盖、
  * 零自造（表内每键都能在蓝本找到出处；蓝本外排除项见 PR 描述）。
  */
-const AUDITED_DESIGN_CODE_COUNT = 65;
+const AUDITED_DESIGN_CODE_COUNT = 67;
 
 describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
   it('shouldRequireExplicitSnapshotUpdate_whenAnyMappingChanges', () => {
@@ -68,10 +68,12 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
         "POINT_NOT_FOUND": "asset.not_found",
         "POINT_NO_DATA": "point.no_data",
         "PROPOSAL_EXPIRED": "proposal.expired",
-        "PROPOSAL_GATE_CONFLICT_QUEUED": "proposal.gate_conflict",
+        "PROPOSAL_GATE_CONFLICT_OVERFLOW": "proposal.gate_conflict_overflow",
+        "PROPOSAL_GATE_CONFLICT_QUEUED": "proposal.gate_conflict_queued",
+        "PROPOSAL_GATE_CONFLICT_TIMEOUT": "proposal.gate_conflict_timeout",
         "PROPOSAL_GATE_RATE_LIMITED": "proposal.gate_rate_limited",
-        "PROPOSAL_GATE_SYSTEM_FUSED": "proposal.gate_circuit_open",
-        "PROPOSAL_GATE_WHITELIST_DENIED": "proposal.gate_not_whitelisted",
+        "PROPOSAL_GATE_SYSTEM_FUSED": "proposal.gate_system_fused",
+        "PROPOSAL_GATE_WHITELIST_DENIED": "proposal.gate_whitelist_denied",
         "PROPOSAL_NOT_FOUND": "proposal.not_found",
         "PROPOSAL_PAYLOAD_INVALID": "proposal.payload_invalid",
         "PROPOSAL_STATE_INVALID": "proposal.state_invalid",
@@ -104,22 +106,27 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
   });
 });
 
-describe('双名收口（DAT-92 评审建议 1：同义异名以 seed 为准）', () => {
-  it('shouldMapGate5ToTheSeedPinnedCode_notTheMechanicalTransliteration', () => {
-    // ddl.md §9.3 / flows.md §2 的清单码 PROPOSAL_GATE_SYSTEM_FUSED 与 seed
-    // proposal.gate_circuit_open 同义：映射以 seed 钉死的码为准。
+describe('双名收口（v1.5 改名〔R1，DAT-132〕随 IMPL-18 落码后退役）', () => {
+  it('shouldMapGate5ToTheSeedPinnedCode_afterV15Rename', () => {
+    // v1.5 种子表已按机械映射结果钉死：PROPOSAL_GATE_SYSTEM_FUSED →
+    // proposal.gate_system_fused（旧 seed proposal.gate_circuit_open 退役）。
     expect(OVERVIEW_DESIGN_CODE_ALIASES['PROPOSAL_GATE_SYSTEM_FUSED']).toBe(
-      'proposal.gate_circuit_open',
+      'proposal.gate_system_fused',
     );
   });
 
-  it('shouldOutlawTheSynonymousTwin_acrossTheWholeTable', () => {
-    // 机械直译产物 proposal.gate_system_fused 是非法码：不入种子表、schema 拒解析、
-    // 且不得作为任何清单码的映射目标出现（同义双码 = API-ERR-01 稳定性事故）。
-    const mechanicalTwin = 'proposal.gate_system_fused';
-    expect(isReasonCode(mechanicalTwin)).toBe(false);
-    expect(ReasonCodeSchema.safeParse(mechanicalTwin).success).toBe(false);
-    expect(Object.values(OVERVIEW_DESIGN_CODE_ALIASES)).not.toContain(mechanicalTwin);
+  it('shouldOutlawTheRetiredTwins_acrossTheWholeTable', () => {
+    // v1.5 改名退役的三个旧码（改义前无消费方，随 IMPL-18 一次入库退役）：
+    // 不入种子表、schema 拒解析、且不得作为任何清单码的映射目标出现。
+    for (const retired of [
+      'proposal.gate_circuit_open',
+      'proposal.gate_not_whitelisted',
+      'proposal.gate_conflict',
+    ]) {
+      expect(isReasonCode(retired)).toBe(false);
+      expect(ReasonCodeSchema.safeParse(retired).success).toBe(false);
+      expect(Object.values(OVERVIEW_DESIGN_CODE_ALIASES)).not.toContain(retired);
+    }
   });
 });
 
@@ -181,15 +188,8 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
     expect({ registered: registered.sort(), draft: draft.sort() }).toMatchInlineSnapshot(`
       {
         "draft": [
-          "CONTROL_MODE_POINT_NOT_CONTROLLABLE",
-          "CONTROL_MODE_SAME",
-          "CONTROL_MODE_TRANSITION_INVALID",
           "FDD_FINDING_NOT_FOUND",
           "FDD_REPORT_NOT_FOUND",
-          "GATE_CLAMP_RANGE_INVALID",
-          "GATE_CONTROLLABLE_REQUIRES_CLAMP",
-          "GATE_RATE_INVALID",
-          "GATE_REASON_REQUIRED",
           "IMPORT_TEMPLATE_MISMATCH",
           "POINT_INACTIVE",
           "PROPOSAL_VERIFY_FAILED",
@@ -204,6 +204,9 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "BUILDING_NAME_REQUIRED",
           "BUILDING_NOT_FOUND",
           "CONFLICT",
+          "CONTROL_MODE_POINT_NOT_CONTROLLABLE",
+          "CONTROL_MODE_SAME",
+          "CONTROL_MODE_TRANSITION_INVALID",
           "CREDENTIAL_LIMIT_EXCEEDED",
           "CREDENTIAL_NOT_FOUND",
           "EQUIPMENT_LOCAL_ID_DUPLICATE",
@@ -211,6 +214,10 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "FORBIDDEN",
           "GATEWAY_NOT_FOUND",
           "GATEWAY_SERIAL_DUPLICATE",
+          "GATE_CLAMP_RANGE_INVALID",
+          "GATE_CONTROLLABLE_REQUIRES_CLAMP",
+          "GATE_RATE_INVALID",
+          "GATE_REASON_REQUIRED",
           "IMPORT_APPLY_CONFLICT",
           "IMPORT_FILE_INVALID",
           "IMPORT_NOT_FOUND",
@@ -223,7 +230,9 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "POINT_NOT_FOUND",
           "POINT_NO_DATA",
           "PROPOSAL_EXPIRED",
+          "PROPOSAL_GATE_CONFLICT_OVERFLOW",
           "PROPOSAL_GATE_CONFLICT_QUEUED",
+          "PROPOSAL_GATE_CONFLICT_TIMEOUT",
           "PROPOSAL_GATE_RATE_LIMITED",
           "PROPOSAL_GATE_SYSTEM_FUSED",
           "PROPOSAL_GATE_WHITELIST_DENIED",

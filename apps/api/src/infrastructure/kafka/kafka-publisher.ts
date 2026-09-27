@@ -7,10 +7,14 @@
  */
 import type { Logger } from 'pino';
 import { Kafka, type Producer } from 'kafkajs';
-import type { ProposalEnvelope } from '@thermio/shared-types';
+import type { ControlExecutedEvent, ProposalEnvelope } from '@thermio/shared-types';
 import { currentTraceId } from '../request-context.js';
 import { newTraceId } from '../request-id.js';
-import { TRACE_ID_HEADER, TOPIC_CONTROL_PROPOSAL } from './kafka.constants.js';
+import {
+  TRACE_ID_HEADER,
+  TOPIC_CONTROL_EXECUTED,
+  TOPIC_CONTROL_PROPOSAL,
+} from './kafka.constants.js';
 
 export interface OutboundMessage {
   readonly topic: string;
@@ -30,6 +34,23 @@ export function buildProposalMessage(proposal: ProposalEnvelope, traceId: string
         key: proposal.proposal_id,
         value: JSON.stringify(proposal),
         headers: { [TRACE_ID_HEADER]: traceId },
+      },
+    ],
+  };
+}
+
+/**
+ * 控制执行终态事件消息（control-safety.md §10，IMPL-18）：key=point_id（同点位
+ * 保序），headers tenant_id/trace_id（ADR-004 / ingest §headers 纪律）。
+ */
+export function buildControlExecutedMessage(event: ControlExecutedEvent): OutboundMessage {
+  return {
+    topic: TOPIC_CONTROL_EXECUTED,
+    messages: [
+      {
+        key: String(event.point_id),
+        value: JSON.stringify(event),
+        headers: { [TRACE_ID_HEADER]: event.trace_id, tenant_id: event.tenant_id },
       },
     ],
   };
@@ -74,6 +95,26 @@ export class KafkaPublisher {
       trace_id: traceId,
     });
   }
+
+  /** control.executed 终态事件（§10：每个执行终态发布；IMPL-18）。 */
+  async publishControlExecuted(event: ControlExecutedEvent): Promise<void> {
+    const message = buildControlExecutedMessage(event);
+    await this.producer.send({
+      topic: message.topic,
+      messages: message.messages.map((entry) => ({
+        key: entry.key,
+        value: entry.value,
+        headers: { ...entry.headers },
+      })),
+    });
+    this.logger.info({
+      msg: 'kafka_control_executed_published',
+      topic: message.topic,
+      proposal_id: event.proposal_id,
+      outcome: event.outcome,
+      trace_id: event.trace_id,
+    });
+  }
 }
 
 /** 两种形态的共同接口（真连 / 停用，KafkaModule 决定实现）。 */
@@ -81,4 +122,5 @@ export interface KafkaPublisherPort {
   connect(): Promise<void>;
   disconnect(): Promise<void>;
   publishProposal(proposal: ProposalEnvelope): Promise<void>;
+  publishControlExecuted(event: ControlExecutedEvent): Promise<void>;
 }

@@ -13,10 +13,10 @@ import { CONTROL_RESULTS, type ControlResult } from '@thermio/shared-types';
 import { z } from 'zod';
 import { TRACE_ID_HEADER, TOPIC_CONTROL_EXECUTED } from './kafka.constants.js';
 
-/** 最小消费面：执行结果消息必带 proposal_id + result。 */
+/** 最小消费面：执行结果消息必带 proposal_id + outcome（§10 契约）。 */
 const ExecutedEventSchema = z.object({
   proposal_id: z.string().min(1),
-  result: z.string(),
+  outcome: z.string(),
 });
 
 export function isControlResult(value: string): value is ControlResult {
@@ -32,9 +32,20 @@ function safeJsonParse(value: string): unknown {
 }
 
 /**
- * 单条 executed 消息加工（纯）：畸形/未知 result WARN 不 crash 消费循环；
- * 合法 result 联动指标 + INFO 日志。返回是否联动了指标（测试断言面）。
+ * 单条 executed 消息加工（纯）：畸形/未知 outcome WARN 不 crash 消费循环；
+ * 合法 outcome 联动指标 + INFO 日志。返回是否联动了指标（测试断言面）。
+ *
+ * IMPL-18 起消费 §10 正式契约（outcome 四值：executed|verify_failed|reverted|
+ * rejected_by_gate）——决策指标按 §10「对齐 control_audit.result 四值」机械映射：
+ * executed→ok、rejected_by_gate→rejected，其余同名。
  */
+const OUTCOME_TO_CONTROL_RESULT: Readonly<Record<string, ControlResult>> = {
+  executed: 'ok',
+  verify_failed: 'verify_failed',
+  reverted: 'reverted',
+  rejected_by_gate: 'rejected',
+};
+
 export function consumeExecutedValue(
   value: string | undefined,
   traceId: string | null,
@@ -48,20 +59,22 @@ export function consumeExecutedValue(
     logger.warn({ msg: 'kafka_executed_malformed', trace_id: traceId });
     return false;
   }
-  if (!isControlResult(parsed.data.result)) {
+  const decision = OUTCOME_TO_CONTROL_RESULT[parsed.data.outcome];
+  if (decision === undefined) {
     logger.warn({
-      msg: 'kafka_executed_unknown_result',
+      msg: 'kafka_executed_unknown_outcome',
       trace_id: traceId,
-      result: parsed.data.result,
+      outcome: parsed.data.outcome,
     });
     return false;
   }
-  onDecision(parsed.data.result);
+  onDecision(decision);
   logger.info({
     msg: 'kafka_executed_consumed',
     trace_id: traceId,
     proposal_id: parsed.data.proposal_id,
-    result: parsed.data.result,
+    outcome: parsed.data.outcome,
+    decision,
   });
   return true;
 }

@@ -2,18 +2,22 @@
  * prom-client 指标骨架（platform.md §7 / ADR-017，OBS-MT-01 RED 基线 + 业务指标同栈）。
  *
  * - svc_http_request_duration_ms：api HTTP P99 的直方图（单位 ms 进名，OBS-MT-04）；
- * - thermio_gate_rejections_total{gate}：五道闸门介入计数，label 取值与 §5.2 的
- *   gate_* cause 子串同源（shared-types GATE_CAUSES——一次定义两处消费）；
+ * - thermio_gate_rejections_total{gate}：闸门拒绝计数，label 值域 whitelist/rate/
+ *   conflict/fuse（platform.md §5.2 v1.5〔R1，DAT-132〕：label = cause 的闸门子串，
+ *   闸门 4 三码同 conflict；与错误码一次定义两处消费）；
+ * - thermio_gate_clamped_total{gate=clamp}：clamp 非拒绝的独立计数（§5.2 v1.5）；
  * - thermio_proposal_decisions_total{decision}：采纳率分母/分子，decision 取值
- *   来自 DATA-MODEL §3.5 control_result（CONTROL_RESULTS），不另造清单。
+ *   来自 DATA-MODEL §3.5 control_result（CONTROL_RESULTS），不另造清单；
+ * - control-safety §10 指标清单（IMPL-18）：executions_total / verify_duration /
+ *   lease_expiries / fuse_state / conflict_queue_depth。
  */
 import { Injectable } from '@nestjs/common';
 import { Counter, Gauge, Histogram, Registry } from 'prom-client';
 import {
   CONTROL_RESULTS,
-  GATE_CAUSES,
+  GATE_LABELS,
   type ControlResult,
-  type GateCause,
+  type GateLabel,
 } from '@thermio/shared-types';
 import { OFFLINE_ALARM_REASONS, type OfflineAlarmReason } from '../../internal-mqtt/contract.js';
 import {
@@ -26,7 +30,13 @@ import {
 
 export const HTTP_DURATION_METRIC = 'svc_http_request_duration_ms';
 export const GATE_REJECTIONS_METRIC = 'thermio_gate_rejections_total';
+export const GATE_CLAMPED_METRIC = 'thermio_gate_clamped_total';
 export const PROPOSAL_DECISIONS_METRIC = 'thermio_proposal_decisions_total';
+export const CONTROL_EXECUTIONS_METRIC = 'thermio_control_executions_total';
+export const CONTROL_VERIFY_DURATION_METRIC = 'thermio_control_verify_duration_seconds';
+export const LEASE_EXPIRIES_METRIC = 'thermio_lease_expiries_total';
+export const FUSE_STATE_METRIC = 'thermio_fuse_state';
+export const CONFLICT_QUEUE_DEPTH_METRIC = 'thermio_proposal_conflict_queue_depth';
 export const MQTT_AUTH_METRIC = 'svc_mqtt_auth_total';
 export const MQTT_EVENTS_METRIC = 'svc_mqtt_events_total';
 export const MQTT_OFFLINE_SIGNALS_METRIC = 'svc_mqtt_offline_signals_total';
@@ -56,8 +66,52 @@ export class MetricsService {
 
   private readonly gateRejectionsTotal = new Counter({
     name: GATE_REJECTIONS_METRIC,
-    help: '五道闸门介入计数（label 与 reason_code gate_* cause 同源，§5.2 咬合）',
+    help: '闸门拒绝计数（label 值域 whitelist/rate/conflict/fuse，与 reason_code 同源，§5.2 v1.5）',
     labelNames: ['gate'],
+    registers: [this.registry],
+  });
+
+  private readonly gateClampedTotal = new Counter({
+    name: GATE_CLAMPED_METRIC,
+    help: '闸门 2 clamp 介入计数（非拒绝，独立于 rejections；§5.2 v1.5〔R1，DAT-132〕）',
+    labelNames: ['gate'],
+    registers: [this.registry],
+  });
+
+  // ── control-safety 执行链指标（control-safety.md §10，IMPL-18）──
+  private readonly controlExecutionsTotal = new Counter({
+    name: CONTROL_EXECUTIONS_METRIC,
+    help: '控制执行终态计数（result = control_audit.result 四值，control-safety §10）',
+    labelNames: ['result'],
+    registers: [this.registry],
+  });
+
+  private readonly controlVerifyDuration = new Histogram({
+    name: CONTROL_VERIFY_DURATION_METRIC,
+    help: '写后回读验证耗时分布（write_cmd 发布至回读终态，control-safety §10）',
+    labelNames: [],
+    buckets: [0.5, 1, 2, 5, 10, 20, 30, 60, 120],
+    registers: [this.registry],
+  });
+
+  private readonly leaseExpiriesTotal = new Counter({
+    name: LEASE_EXPIRIES_METRIC,
+    help: '租约过期接管计数（control-safety §6.3/§10）',
+    labelNames: [],
+    registers: [this.registry],
+  });
+
+  private readonly fuseState = new Gauge({
+    name: FUSE_STATE_METRIC,
+    help: '系统熔断态 gauge（1=open / 0=closed；control-safety §10）',
+    labelNames: ['system_id'],
+    registers: [this.registry],
+  });
+
+  private readonly conflictQueueDepth = new Gauge({
+    name: CONFLICT_QUEUE_DEPTH_METRIC,
+    help: '每设备排队提案深度（control-safety §3.7/§10）',
+    labelNames: ['equipment_id'],
     registers: [this.registry],
   });
 
@@ -147,13 +201,22 @@ export class MetricsService {
 
   constructor() {
     // 预热 label 取值：Counter 的 label 组合在首次 inc 前不进输出——显式 inc(0)
-    // 让 /metrics 从第一刻起就暴露五闸门/四结果全维度零值，PromQL 不因「尚未发生」缺序列。
-    for (const gate of GATE_CAUSES) {
-      this.gateRejectionsTotal.labels({ gate }).inc(0);
+    // 让 /metrics 从第一刻起就暴露闸门/结果全维度零值，PromQL 不因「尚未发生」缺序列。
+    for (const gate of GATE_LABELS) {
+      if (gate === 'clamp') {
+        this.gateClampedTotal.labels({ gate }).inc(0);
+      } else {
+        this.gateRejectionsTotal.labels({ gate }).inc(0);
+      }
     }
     for (const decision of CONTROL_RESULTS) {
       this.proposalDecisionsTotal.labels({ decision }).inc(0);
     }
+    for (const result of CONTROL_RESULTS) {
+      this.controlExecutionsTotal.labels({ result }).inc(0);
+    }
+    this.leaseExpiriesTotal.inc(0);
+    this.controlVerifyDuration.observe(0);
     for (const result of ['allow', 'deny'] as const) {
       this.mqttAuthTotal.labels({ result }).inc(0);
     }
@@ -205,12 +268,41 @@ export class MetricsService {
       .observe(durationMs);
   }
 
-  recordGate(cause: GateCause): void {
-    this.gateRejectionsTotal.labels({ gate: cause }).inc();
+  /** 闸门拒绝（label = 闸门子串；clamp 不走此口——recordClamped 独立计数）。 */
+  recordGate(gate: GateLabel): void {
+    if (gate === 'clamp') return; // 型面防误用：clamp 非拒绝
+    this.gateRejectionsTotal.labels({ gate }).inc();
+  }
+
+  /** 闸门 2 clamp 介入（platform §5.2 v1.5：非拒绝，独立计数器）。 */
+  recordClamped(): void {
+    this.gateClampedTotal.labels({ gate: 'clamp' }).inc();
   }
 
   recordDecision(decision: ControlResult): void {
     this.proposalDecisionsTotal.labels({ decision }).inc();
+  }
+
+  // ── control-safety 执行链（§10）──
+
+  recordControlExecution(result: ControlResult): void {
+    this.controlExecutionsTotal.labels({ result }).inc();
+  }
+
+  observeVerifyDuration(seconds: number): void {
+    this.controlVerifyDuration.observe(seconds);
+  }
+
+  recordLeaseExpiry(): void {
+    this.leaseExpiriesTotal.inc();
+  }
+
+  setFuseState(systemId: string, open: boolean): void {
+    this.fuseState.labels({ system_id: systemId }).set(open ? 1 : 0);
+  }
+
+  setConflictQueueDepth(equipmentId: string, depth: number): void {
+    this.conflictQueueDepth.labels({ equipment_id: equipmentId }).set(depth);
   }
 
   recordMqttAuth(result: 'allow' | 'deny'): void {

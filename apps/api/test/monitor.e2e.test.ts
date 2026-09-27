@@ -92,6 +92,7 @@ function buildFakeStore(seedRef: () => MonitorSeed) {
       }
       return Promise.resolve(map);
     },
+    presentInWindow: () => Promise.resolve(new Set<number>()), // IMPL-15 面（本套不触达）
     listRaw: () => Promise.resolve([]),
     listAggregate: () => Promise.resolve([]),
     windowEndpoints: (pointIds) => {

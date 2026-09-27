@@ -59,6 +59,7 @@ const fakeStore: TelemetryStore = {
   listRaw: () => Promise.resolve([]),
   listAggregate: () => Promise.resolve([]),
   windowEndpoints: () => Promise.resolve(new Map()),
+  presentInWindow: () => Promise.resolve(new Set<number>()), // IMPL-15 面（本套不触达）
 };
 
 /** node:http 原生 SSE 客户端（vitest worker 内 undici 流式读取不稳定，换确定性实现）。 */

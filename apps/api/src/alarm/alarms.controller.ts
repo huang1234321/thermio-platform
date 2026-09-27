@@ -3,7 +3,8 @@
  *
  * - 能力键（§1.5 = M7-auth §4.1 定稿逐字）：alarms.read（viewer+）/ alarms.ack
  *   （operator+）/ alarms.suppress（admin）；
- * - 幂等键可选（API-DSN-01）：ack/close/suppress；
+ * - 幂等键可选（API-DSN-01）：ack/close（suppress/batch-ack 不挂幂等——
+ *   suppress 天然可重复触发、batch-ack 逐项 207 自幂等）；
  * - batch-ack 逐项 207（API-DSN-05，上限 100 = platform §12 容量表）；
  * - 错误码域见 shared-types reason-codes 五批注册（alarm.*）。
  */

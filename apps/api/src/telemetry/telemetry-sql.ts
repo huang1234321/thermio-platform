@@ -76,3 +76,20 @@ LIMIT 1`,
     values: [pointId],
   };
 }
+
+/**
+ * 批量 latest（IMPL-11 设备点位列表快照复用，M1-asset §3.4「DISTINCT ON 可承受」）：
+ * 一次往返取一组点位各自最近行；空集调用方自行短路（不产生 SQL）。
+ */
+export function buildLatestBatchQuery(pointIds: readonly number[]): {
+  text: string;
+  values: unknown[];
+} {
+  return {
+    text: `SELECT DISTINCT ON (point_id) point_id, ts, value, value_text, quality
+FROM telemetry
+WHERE point_id = ANY($1::bigint[])
+ORDER BY point_id, ts DESC`,
+    values: [pointIds],
+  };
+}

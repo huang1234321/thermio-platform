@@ -22,13 +22,15 @@ describe('reason_code registry', () => {
     }
   });
 
-  it('shouldRegisterExactlyThirtyCodes_eighteenSeedsPlusThreeBatches', () => {
-    // §5.2 种子 18 码（common.not_found 随 DAT-119 / DAT-96 收尾增补）+ 三批增量
+  it('shouldRegisterExactlyFortyOneCodes_eighteenSeedsPlusFourBatches', () => {
+    // §5.2 种子 18 码（common.not_found 随 DAT-119 / DAT-96 收尾增补）+ 四批增量
     // （数组注释留痕，均走 PR 治理）：IMPL-12 三遥测码（DAT-115）
     // + IMPL-7 auth.service_unauthorized（DAT-110，§11-2）
     // + IMPL-10 八码（DAT-113：common.rate_limited、auth.unauthenticated/
-    // refresh_revoked、user.* 四码、role.unknown）。
-    expect(REASON_CODES).toHaveLength(30);
+    // refresh_revoked、user.* 四码、role.unknown）
+    // + IMPL-11 十一码（DAT-114，M1-asset §1.2 落码值：common.conflict、
+    // asset. 枚举/重复四码、point. 两码、gateway. 两码、credential. 两码）。
+    expect(REASON_CODES).toHaveLength(41);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { ControlAuditRow } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
+import { errorText } from '../asset/asset-shared.js';
 import {
   ActorTag,
   AuditResultTag,
@@ -73,6 +74,11 @@ export function ProposalExecutionPage(): React.ReactNode {
       setLoading(false);
     },
     true,
+    (cause) => {
+      // R-1：恢复错误路径具体原因展示（读失败保留上一帧，手动刷新兜底）
+      setError(errorText(cause, '执行详情加载失败'));
+      setLoading(false);
+    },
   );
   useEffect(() => {
     setLoading(false);

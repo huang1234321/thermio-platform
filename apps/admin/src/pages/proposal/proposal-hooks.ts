@@ -46,12 +46,15 @@ export function useProposalPolling<T>(
   isActive: (data: T) => boolean,
   onData: (data: T) => void,
   enabled: boolean,
+  onError?: (cause: unknown) => void,
 ): Readonly<{ readonly rounds: React.MutableRefObject<number> }> {
   const rounds = useRef(0);
   const activeRef = useRef(isActive);
   activeRef.current = isActive;
   const dataRef = useRef(onData);
   dataRef.current = onData;
+  const errorRef = useRef(onError);
+  errorRef.current = onError;
 
   useEffect(() => {
     if (!enabled) return;
@@ -71,8 +74,10 @@ export function useProposalPolling<T>(
           rounds.current += 1;
           timer = setTimeout(() => void round(), PROPOSAL_POLL_INTERVAL_MS);
         }
-      } catch {
-        // 读失败不乐观更新：保留上一帧数据、停止轮询（手动刷新兜底）
+      } catch (cause) {
+        // 读失败不乐观更新：保留上一帧数据、停止轮询（手动刷新兜底）；
+        // 具体原因经 onError 交消费方展示（R-1）
+        errorRef.current?.(cause);
       }
     };
     void round();

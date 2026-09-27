@@ -123,6 +123,7 @@ const fakeTelemetry: TelemetryStore = {
     await Promise.resolve();
     return new Set(pointIds.filter((id) => presence.has(id)));
   },
+  windowEndpoints: () => Promise.resolve(new Map()), // M3 面（本套不触达）
 };
 
 // ---------------------------------------------------------------------------

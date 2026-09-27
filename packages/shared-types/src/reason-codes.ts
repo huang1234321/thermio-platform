@@ -67,13 +67,19 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * - 接入域三码 gateway.not_found / gateway.serial_duplicate / credential.not_found /
  *   credential.limit_exceeded（R6：platform 种子未覆盖接入域）。
  *
+ * 六批注册（IMPL-14 api 包 / DAT-117，实时监控 M3-monitor.md §1.2 落码值逐字）：
+ * - stream.limit_exceeded（400，SSE 单连接订阅点数 >500，整单拒绝不部分放行）；
+ * - point.not_found（400，SSE 订阅点集含越界/不存在点，整单 + details.point_ids——
+ *   platform §10 在用码，与 M1 单资源 asset.not_found 的分工见 M3-monitor R4）；
+ * - stream.server_busy（503，SSE 每实例并发连接 ≥100，响应附 Retry-After: 5，M3-monitor R5）。
+ *
  * 五批注册（IMPL-13 / DAT-116，告警引擎与告警中心，modules M4-alarm.md §1.2 落码值逐字）：
  * - alarm.not_found（404，SEC-AZ-03 越权同码；种子仅 rule_not_found）；
  * - alarm.state_invalid（409，状态机非法迁移）；
  * - 校验类 alarm.suppress_duration_invalid / alarm.rule_scope_invalid /
  *   alarm.rule_params_invalid / alarm.rule_type_unknown / alarm.severity_unknown（422）；
  * - alarm.rule_in_use（409，DELETE 被引用——FK RESTRICT 应用层映射）。
- * 五批注册（IMPL-15 / DAT-118，点表导入向导，modules M2-import.md §1.2 增量 8 码逐字；
+ * 七批注册（IMPL-15 / DAT-118，点表导入向导，modules M2-import.md §1.2 增量 8 码逐字；
  * `import.template_mismatch` **不落 HTTP 码**——表头不符为异步解析期发现，由作业
  * failure.code='template_mismatch' 承载（M2-import §1.3/R1），故不入本表）：
  * - import.not_found（404，details.entity ∈ {import_job, import_row}）；
@@ -131,6 +137,9 @@ export const REASON_CODES = [
   'point.no_data',
   'telemetry.range_invalid',
   'telemetry.store_unavailable',
+  'stream.limit_exceeded',
+  'point.not_found',
+  'stream.server_busy',
   'import.not_found',
   'import.state_invalid',
   'import.file_invalid',
@@ -414,6 +423,24 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 503,
     description:
       '遥测查询所需存储不可用或未配置（TSDB 只读连接 / PG 点位档案；dev 无栈时显式降级口径，ADR-005 read replica 配置位）',
+  },
+  'stream.limit_exceeded': {
+    domain: 'stream',
+    http: 400,
+    description:
+      'SSE 单连接订阅点数超上限（platform §12：≤500，整单拒绝不部分放行；M3-monitor §1.2）',
+  },
+  'point.not_found': {
+    domain: 'point',
+    http: 400,
+    description:
+      'SSE 订阅点集含越界/不存在点（platform §10 逐字：整单 400 + details.point_ids；单资源端点仍用 asset.not_found，分工见 M3-monitor R4）',
+  },
+  'stream.server_busy': {
+    domain: 'stream',
+    http: 503,
+    description:
+      'SSE 每实例并发连接达上限（platform §12：≤100；响应附 Retry-After: 5，客户端退避重连任意实例，M3-monitor R5）',
   },
   'import.not_found': {
     domain: 'import',

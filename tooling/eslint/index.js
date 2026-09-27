@@ -17,6 +17,7 @@ const PACKAGES = [
   '@thermio/scene-schema',
   '@thermio/bind-core',
   '@thermio/ui',
+  '@thermio/viz-3d',
 ];
 const INTERNAL = [...APPS, ...PACKAGES];
 
@@ -36,6 +37,9 @@ const ALLOWED_INTERNAL_DEPS = {
   '@thermio/scene-schema': ['@thermio/shared-types', '@thermio/bind-core'],
   '@thermio/bind-core': ['@thermio/shared-types'],
   '@thermio/ui': ['@thermio/shared-types'],
+  // viz-3d（ADR-013）：引擎只吃 scene-schema 清单契约与 shared-types 基础类型；
+  // 求值在 bind-core（由 apps 消费，M3-monitor §6.1），引擎不反向依赖
+  '@thermio/viz-3d': ['@thermio/shared-types', '@thermio/scene-schema'],
 };
 
 function boundaryPatterns(packageName) {

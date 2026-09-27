@@ -265,6 +265,8 @@ describe('enum registry snapshot', () => {
           "chw_supply_temp",
           "power",
           "run_status",
+          "energy",
+          "load_rate",
         ],
         "ROLES": [
           "admin",

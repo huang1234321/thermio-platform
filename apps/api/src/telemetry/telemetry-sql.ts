@@ -55,8 +55,11 @@ export function buildAggregateQuery(
   window: IntervalWindow,
 ): { text: string; values: unknown[] } {
   const table = TELEMETRY_SOURCE_TABLES[interval];
+  // 计数列显式 ::int：cagg 里 count(*) 为 bigint，node-pg 将 bigint 序列化为
+  // string，违约 shared-types TelemetryAggregateSampleSchema 的 z.number().int()
+  // （DAT-117 发现，5min/1h 全体消费方被 zod 拒绝）。桶计数上界远小于 2^31，强转安全。
   return {
-    text: `SELECT bucket, avg, min, max, last, stddev, sample_count, bad_count, quality_mask
+    text: `SELECT bucket, avg, min, max, last, stddev, sample_count::int AS sample_count, bad_count::int AS bad_count, quality_mask
 FROM ${table}
 WHERE point_id = $1 AND bucket >= $2 AND bucket < $3 AND ($4::timestamptz IS NULL OR bucket > $4)
 ORDER BY bucket ASC
@@ -74,6 +77,27 @@ WHERE point_id = $1
 ORDER BY ts DESC
 LIMIT 1`,
     values: [pointId],
+  };
+}
+
+/**
+ * 能量累计类点位窗口首末值（M3-monitor §3.1 KPI 能耗数据面，IMPL-14）：
+ * 一次往返取一组点位在 [from, to) 内各自的原始首值/末值（差值 = 窗口能耗）；
+ * value IS NULL（枚态行）不参与；空窗口/无数据点不出现在结果。
+ */
+export function buildWindowEndpointsQuery(
+  pointIds: readonly number[],
+  from: string,
+  to: string,
+): { text: string; values: unknown[] } {
+  return {
+    text: `SELECT point_id,
+       (array_agg(value ORDER BY ts ASC))[1]  AS first_value,
+       (array_agg(value ORDER BY ts DESC))[1] AS last_value
+FROM telemetry
+WHERE point_id = ANY($1::bigint[]) AND ts >= $2 AND ts < $3 AND value IS NOT NULL
+GROUP BY point_id`,
+    values: [pointIds, from, to],
   };
 }
 

@@ -49,8 +49,16 @@ function fakeStore() {
   const listRaw = vi.fn().mockResolvedValue([]);
   const latestBatch = vi.fn().mockResolvedValue(new Map());
   const listAggregate = vi.fn().mockResolvedValue([]);
+  const windowEndpoints = vi.fn().mockResolvedValue(new Map());
   const presentInWindow = vi.fn().mockResolvedValue(new Set<number>());
-  const store: TelemetryStore = { latest, latestBatch, listRaw, listAggregate, presentInWindow };
+  const store: TelemetryStore = {
+    latest,
+    latestBatch,
+    listRaw,
+    listAggregate,
+    windowEndpoints,
+    presentInWindow,
+  };
   return { store, latest, listRaw, listAggregate, presentInWindow };
 }
 

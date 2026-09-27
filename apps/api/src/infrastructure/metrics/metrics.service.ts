@@ -36,6 +36,8 @@ export const ALARM_CLOSED_METRIC = 'thermio_alarm_closed_total';
 export const ALARM_ACTIVE_METRIC = 'thermio_alarm_active';
 export const ALARM_SUPPRESSED_ACTIVE_METRIC = 'thermio_alarm_suppressed_active';
 export const QUALITY_EVENTS_METRIC = 'svc_quality_events_total';
+export const SSE_ACTIVE_CONNECTIONS_METRIC = 'svc_sse_active_connections';
+export const SSE_PUSH_METRIC = 'svc_sse_push_total';
 
 /** 直方图桶（ms）：单楼私有化低流量形态，覆盖 5ms–10s（ADR-017 api HTTP P99 观测窗）。 */
 const HTTP_DURATION_BUCKETS_MS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
@@ -130,6 +132,19 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // ── SSE 实时通道指标（platform.md §10 可观测，M3-monitor，IMPL-14）──
+  private readonly sseActiveConnections = new Gauge({
+    name: SSE_ACTIVE_CONNECTIONS_METRIC,
+    help: 'SSE 活跃连接 gauge（订阅状态为连接内存态，重启后客户端重连任意实例自愈）',
+    registers: [this.registry],
+  });
+
+  private readonly ssePushTotal = new Counter({
+    name: SSE_PUSH_METRIC,
+    help: 'SSE telemetry 事件推送计数（节流窗口内变更点批量，每批量记 1）',
+    registers: [this.registry],
+  });
+
   constructor() {
     // 预热 label 取值：Counter 的 label 组合在首次 inc 前不进输出——显式 inc(0)
     // 让 /metrics 从第一刻起就暴露五闸门/四结果全维度零值，PromQL 不因「尚未发生」缺序列。
@@ -166,6 +181,22 @@ export class MetricsService {
     for (const event of QUALITY_EVENTS) {
       this.qualityEventsTotal.labels({ event }).inc(0);
     }
+    this.sseActiveConnections.inc(0);
+    this.ssePushTotal.inc(0);
+  }
+
+  /** SSE 连接建立/释放（gauge 增减；platform.md §10）。 */
+  sseConnectionOpened(): void {
+    this.sseActiveConnections.inc(1);
+  }
+
+  sseConnectionClosed(): void {
+    this.sseActiveConnections.dec(1);
+  }
+
+  /** SSE telemetry 事件推送（每批量记 1）。 */
+  ssePushed(): void {
+    this.ssePushTotal.inc(1);
   }
 
   recordHttpDuration(method: string, route: string, statusCode: number, durationMs: number): void {

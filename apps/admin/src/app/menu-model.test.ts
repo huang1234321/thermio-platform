@@ -4,7 +4,7 @@
  * 渲染面（jsdom）另见 menu-render.test.tsx。
  */
 import { describe, expect, it } from 'vitest';
-import { MENU_ENTRIES, visibleMenuEntries } from './menu-model.js';
+import { MENU_ENTRIES, selectedMenuKeys, visibleMenuEntries } from './menu-model.js';
 import { ROLE_CAPABILITIES } from '@thermio/shared-types';
 
 describe('visibleMenuEntries（SEC-AZ-05 显隐）', () => {
@@ -39,5 +39,27 @@ describe('visibleMenuEntries（SEC-AZ-05 显隐）', () => {
     // 能力被清空（如待轮换态）：个人设置仍可用（SEC-PW-03 改密闭环的 UI 面）
     const visible = visibleMenuEntries([]);
     expect(visible.map((entry) => entry.key)).toEqual(['settings-me', 'settings-roles']);
+  });
+});
+
+describe('selectedMenuKeys（子路由归属父菜单高亮；Menu item key = route）', () => {
+  it('shouldHighlightTheMonitorGroup_forSubRoutes', () => {
+    expect(selectedMenuKeys('/monitor', MENU_ENTRIES)).toEqual(['/monitor']);
+    expect(selectedMenuKeys('/monitor/equipments', MENU_ENTRIES)).toEqual(['/monitor']);
+    expect(
+      selectedMenuKeys('/monitor/equipments/3fa9a86c-1000-4b01-9c0e-00000000c101', MENU_ENTRIES),
+    ).toEqual(['/monitor']);
+  });
+
+  it('shouldPickTheLongestPrefix_whenRoutesNest', () => {
+    // 前缀嵌套时取最长（/control/points 而非误命中更短同前缀项）
+    expect(selectedMenuKeys('/control/points', MENU_ENTRIES)).toEqual(['/control/points']);
+    expect(selectedMenuKeys('/settings/users', MENU_ENTRIES)).toEqual(['/settings/users']);
+  });
+
+  it('shouldReturnEmpty_forUnroutedPaths', () => {
+    expect(selectedMenuKeys('/nope', MENU_ENTRIES)).toEqual([]);
+    // 前缀必须是路径段边界：/monitorX 不得命中 /monitor
+    expect(selectedMenuKeys('/monitorX', MENU_ENTRIES)).toEqual([]);
   });
 });

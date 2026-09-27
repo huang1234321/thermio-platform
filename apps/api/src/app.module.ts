@@ -26,6 +26,7 @@ import {
   GateClampedInterceptor,
   ObservabilityInterceptor,
 } from './infrastructure/observability.interceptor.js';
+import { MonitorModule } from './monitor/monitor.module.js';
 import { TelemetryModule } from './telemetry/telemetry.module.js';
 import { UsersModule } from './users/users.module.js';
 import { AssetModule } from './asset/asset.module.js';
@@ -48,6 +49,9 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
     InternalMqttModule,
     AuthModule,
     UsersModule,
+    // MonitorModule 必须先于 AssetModule：`points/latest`（M3 §3.6）需抢在资产域
+    // `points/:pointId` 之前注册（express 按注册序匹配）；e2e 有路由序回归钉。
+    MonitorModule,
     AssetModule,
     AlarmModule,
     ImportModule,

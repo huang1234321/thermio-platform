@@ -55,6 +55,7 @@ function buildStore() {
     ...state,
     latest: () =>
       Promise.resolve({ ts: '2026-09-26T08:00:00Z', value: 7.5, value_text: null, quality: 0 }),
+    windowEndpoints: () => Promise.resolve(new Map()),
     latestBatch: () => Promise.resolve(new Map()),
     listRaw: (window: FakeWindow) => {
       store.rawCalls += 1;

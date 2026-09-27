@@ -198,7 +198,6 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "PROPOSAL_STATE_INVALID",
           "PROPOSAL_VERIFY_FAILED",
           "SCENE_NOT_FOUND",
-          "STREAM_LIMIT_EXCEEDED",
         ],
         "registered": [
           "ALARM_NOT_FOUND",
@@ -238,6 +237,7 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "SCOPE_BUILDING_MISMATCH",
           "SELFCHECK_NOT_READY",
           "SERVICE_UNAUTHORIZED",
+          "STREAM_LIMIT_EXCEEDED",
           "SUPPRESS_DURATION_INVALID",
           "SYSTEM_NOT_FOUND",
           "SYSTEM_TYPE_UNKNOWN",

@@ -13,6 +13,7 @@ import {
   buildLatestBatchQuery,
   buildLatestQuery,
   buildRawQuery,
+  buildWindowEndpointsQuery,
   type IntervalWindow,
 } from './telemetry-sql.js';
 import { TelemetryStoreUnavailableError, isPgConnectivityError } from './telemetry-store.error.js';
@@ -28,6 +29,13 @@ interface RawRow extends QueryResultRow {
 /** 批量 latest 行（IMPL-11 列表快照；DISTINCT ON 保留每点最近一行）。 */
 interface LatestBatchRow extends RawRow {
   point_id: string | number;
+}
+
+/** 能量窗口首末值行（M3-monitor §3.1；first/last = 窗口内首/末非空 value）。 */
+interface WindowEndpointsRow extends QueryResultRow {
+  point_id: string | number;
+  first_value: number | null;
+  last_value: number | null;
 }
 
 /** 聚合桶行（ddl.md §11.2；stddev_samp 单样本桶为 NULL）。 */
@@ -53,6 +61,12 @@ export interface TelemetryStore {
     interval: '5min' | '1h',
     window: IntervalWindow,
   ): Promise<TelemetryAggregateSample[]>;
+  /** 窗口首末值（M3-monitor §3.1 KPI 能耗）：point_id → {first, last}；无数据点不在映射。 */
+  windowEndpoints(
+    pointIds: readonly number[],
+    from: string,
+    to: string,
+  ): Promise<Map<number, { first: number; last: number }>>;
 }
 
 export class TsdbReadRepository implements TelemetryStore {
@@ -77,6 +91,23 @@ export class TsdbReadRepository implements TelemetryStore {
       latest.set(Number(row.point_id), toRawSample(row));
     }
     return latest;
+  }
+
+  async windowEndpoints(
+    pointIds: readonly number[],
+    from: string,
+    to: string,
+  ): Promise<Map<number, { first: number; last: number }>> {
+    if (pointIds.length === 0) return new Map();
+    const query = buildWindowEndpointsQuery(pointIds, from, to);
+    const rows = await this.run<WindowEndpointsRow>(query.text, query.values);
+    const endpoints = new Map<number, { first: number; last: number }>();
+    for (const row of rows) {
+      if (row.first_value !== null && row.last_value !== null) {
+        endpoints.set(Number(row.point_id), { first: row.first_value, last: row.last_value });
+      }
+    }
+    return endpoints;
   }
 
   async listRaw(window: IntervalWindow): Promise<TelemetryRawSample[]> {
@@ -144,5 +175,6 @@ export function disabledTelemetryStore(reason: string): TelemetryStore {
     latestBatch: unavailable,
     listRaw: unavailable,
     listAggregate: unavailable,
+    windowEndpoints: unavailable,
   };
 }

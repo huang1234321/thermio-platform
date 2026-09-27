@@ -81,6 +81,27 @@ LIMIT 1`,
 }
 
 /**
+ * 能量累计类点位窗口首末值（M3-monitor §3.1 KPI 能耗数据面，IMPL-14）：
+ * 一次往返取一组点位在 [from, to) 内各自的原始首值/末值（差值 = 窗口能耗）；
+ * value IS NULL（枚态行）不参与；空窗口/无数据点不出现在结果。
+ */
+export function buildWindowEndpointsQuery(
+  pointIds: readonly number[],
+  from: string,
+  to: string,
+): { text: string; values: unknown[] } {
+  return {
+    text: `SELECT point_id,
+       (array_agg(value ORDER BY ts ASC))[1]  AS first_value,
+       (array_agg(value ORDER BY ts DESC))[1] AS last_value
+FROM telemetry
+WHERE point_id = ANY($1::bigint[]) AND ts >= $2 AND ts < $3 AND value IS NOT NULL
+GROUP BY point_id`,
+    values: [pointIds, from, to],
+  };
+}
+
+/**
  * 批量 latest（IMPL-11 设备点位列表快照复用，M1-asset §3.4「DISTINCT ON 可承受」）：
  * 一次往返取一组点位各自最近行；空集调用方自行短路（不产生 SQL）。
  */

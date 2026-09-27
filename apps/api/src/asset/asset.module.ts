@@ -37,5 +37,7 @@ import { SystemsService } from './systems.service.js';
     GatewaysService,
     IdempotencyStore,
   ],
+  // M3 监控详情（IMPL-14）复用 PointsService 的 §3.4 latest 快照装配
+  exports: [PointsService],
 })
 export class AssetModule {}

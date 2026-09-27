@@ -121,6 +121,9 @@ describe('reason_code registry snapshot', () => {
         "point.not_controllable": {
           "http": 409,
         },
+        "point.not_found": {
+          "http": 400,
+        },
         "point.quantity_type_unknown": {
           "http": 422,
         },
@@ -149,6 +152,12 @@ describe('reason_code registry snapshot', () => {
         },
         "role.unknown": {
           "http": 422,
+        },
+        "stream.limit_exceeded": {
+          "http": 400,
+        },
+        "stream.server_busy": {
+          "http": 503,
         },
         "telemetry.range_invalid": {
           "http": 422,

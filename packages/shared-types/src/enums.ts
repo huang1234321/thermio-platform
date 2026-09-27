@@ -32,8 +32,19 @@ export const EQUIPMENT_TYPES = [
 export const EquipmentTypeSchema = z.enum(EQUIPMENT_TYPES);
 export type EquipmentType = z.infer<typeof EquipmentTypeSchema>;
 
-/** 量类型（DATA-MODEL §3.3 quantity_type）。消费方：FDD 规则库「设备类型 × 量类型」二维标签。 */
-export const QUANTITY_TYPES = ['chw_supply_temp', 'power', 'run_status'] as const;
+/**
+ * 量类型（DATA-MODEL §3.3 quantity_type，开放集）。消费方：FDD 规则库「设备类型 × 量类型」二维标签。
+ * R12 增量（M3-monitor §11 R12，验收 v1.3 通过）：同批登记 energy（能量累计量，kWh——
+ * KPI 能耗首末差值数据面）+ load_rate（负荷率 %，冷机控制器直读——验收拍板 3 接入项非派生）。
+ * 开放集扩充 = 发版动作（platform §6.1）：DATA-MODEL §3.3 示例同步归 platform owner。
+ */
+export const QUANTITY_TYPES = [
+  'chw_supply_temp',
+  'power',
+  'run_status',
+  'energy',
+  'load_rate',
+] as const;
 export const QuantityTypeSchema = z.enum(QUANTITY_TYPES);
 export type QuantityType = z.infer<typeof QuantityTypeSchema>;
 

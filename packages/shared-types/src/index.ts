@@ -7,3 +7,4 @@ export * from './telemetry.js';
 export * from './asset.js';
 export * from './alarm.js';
 export * from './monitor.js';
+export * from './fdd.js';

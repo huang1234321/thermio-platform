@@ -94,8 +94,13 @@ skipped('tenant context discipline（ddl.md §5.2 fail-closed）', () => {
     ).rejects.toThrow(/uuid/);
   });
 
-  it('shouldKeepTheAuthRoleBypassNarrow_appUserOnly', async () => {
-    // thermio_auth 旁路面验收：app_user 可读（登录解析），业务表不可读（面未扩大）
+  it('shouldKeepTheAuthRoleBypassNarrow_enumeratedInternalReadOnly', async () => {
+    // thermio_auth 旁路面验收：旁路 = 枚举的 internal_read 只读表集（面收窄纪律），
+    // 其余业务表一律拒绝。枚举集随 /internal/* 面扩列：
+    // - 0001：device_credential / gateway（EMQX 认证）；
+    // - 0005：app_user（登录 email 解析）；
+    // - 0007：tenant / equipment（internal 面租户由目标实体解析，platform §11-5）；
+    // - 0008：building / point / hvac_system（asset-snapshot 投影 + report 定位）。
     const authPool = new pg.Pool({
       connectionString: process.env['PG_E2E_AUTH_URL'],
       max: 1,
@@ -103,12 +108,23 @@ skipped('tenant context discipline（ddl.md §5.2 fail-closed）', () => {
     try {
       const users = await authPool.query(`SELECT count(*)::int AS n FROM app_user`);
       expect(users.rows[0]).toEqual({ n: 5 }); // 双租户全部用户（email 全局解析需要）
-      await expect(authPool.query(`SELECT count(*) FROM building`)).rejects.toThrow(
-        /permission denied/i,
-      );
-      await expect(authPool.query(`SELECT count(*) FROM auth_session`)).rejects.toThrow(
-        /permission denied/i,
-      );
+      for (const table of ['tenant', 'equipment', 'building', 'point', 'hvac_system']) {
+        const readable = await authPool.query(`SELECT count(*)::int AS n FROM ${table}`);
+        expect(readable.rows[0]?.n).toBeGreaterThanOrEqual(0); // 有权限即可达
+      }
+      // 负探针：枚举集之外的业务表仍然拒绝（旁路面未失控）
+      for (const table of [
+        'auth_session',
+        'proposal',
+        'fdd_finding',
+        'fdd_report',
+        'control_audit',
+        'alarm_event',
+      ]) {
+        await expect(authPool.query(`SELECT count(*) FROM ${table}`)).rejects.toThrow(
+          /permission denied/i,
+        );
+      }
     } finally {
       await authPool.end();
     }

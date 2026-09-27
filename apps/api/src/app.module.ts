@@ -32,6 +32,7 @@ import { UsersModule } from './users/users.module.js';
 import { AssetModule } from './asset/asset.module.js';
 import { AlarmModule } from './alarm/alarm.module.js';
 import { ProposalModule } from './proposal/proposal.module.js';
+import { InternalFddModule } from './internal-fdd/internal-fdd.module.js';
 import { InternalAlgoModule } from './internal-algo/internal-algo.module.js';
 
 /** 全局过滤器/拦截器（执行序：中间件 → 拦截器 → 管道 → 控制器）。 */
@@ -57,6 +58,7 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
     AlarmModule,
     InternalAlgoModule,
     ProposalModule,
+    InternalFddModule,
   ],
   controllers: [HealthController, MetricsController],
   providers: [...GLOBAL_OBSERVABILITY, { provide: APP_GUARD, useClass: JwtAuthGuard }],

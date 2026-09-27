@@ -122,6 +122,25 @@ const AppConfigSchema = z.object({
     .string()
     .regex(/^\d{1,4}\/\d{1,5}$/)
     .default('10/300'),
+  // ── /internal/* algo 服务凭证（platform.md §11，IMPL-17 / DAT-163）──
+  /** SVC_TOKEN_ALGO：thermio-algo 调用方静态凭证（≥256-bit，SEC-KEY-01 env 注入）。 */
+  SVC_TOKEN_ALGO: z.string().default(''),
+  /** 轮换双读窗口内旧 token（SEC-KEY-04；空 = 无轮换进行中）。 */
+  SVC_TOKEN_ALGO_PREVIOUS: z.string().default(''),
+  /** internal 提交限速（platform §12）："次数/窗口秒"，proposals/findings 各 60/min。 */
+  INTERNAL_SUBMIT_RATE_LIMIT: z
+    .string()
+    .regex(/^\d{1,4}\/\d{1,5}$/)
+    .default('60/60'),
+  /** proposal 过期沉降节奏（M5 §4.2：60s expiry-sweeper；测试可调小）。 */
+  PROPOSAL_EXPIRY_SWEEP_INTERVAL_MS: z.coerce.number().int().min(50).default(60_000),
+  /**
+   * approved→executed|failed 执行仲裁归 IMPL-18（control-safety）；本卡 dev-only
+   * mock 沉降器（admin 闭环演练用）：approve 后短延时置 executed + 合成
+   * execution_result/审计行。默认关；生产/验收栈不得开启。
+   */
+  PROPOSAL_MOCK_EXECUTOR: z.enum(['off', 'on']).default('off'),
+  PROPOSAL_MOCK_EXECUTOR_DELAY_MS: z.coerce.number().int().min(0).default(1_500),
 });
 
 export interface AppConfig extends z.infer<typeof AppConfigSchema> {
@@ -143,6 +162,8 @@ export interface AppConfig extends z.infer<typeof AppConfigSchema> {
   };
   /** 认证域是否启用（PG_API_URL/PG_AUTH_URL/AUTH_JWT_SECRET 三者齐备）。 */
   readonly authEnabled: boolean;
+  /** /internal/* algo 面是否启用（SVC_TOKEN_ALGO 已配置）。 */
+  readonly internalAlgoEnabled: boolean;
 }
 
 /** 解析并校验环境变量；畸形值直接失败快（启动期报错优于运行期漂移）。 */
@@ -177,5 +198,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       parsed.PG_API_URL.length > 0 &&
       parsed.PG_AUTH_URL.length > 0 &&
       parsed.AUTH_JWT_SECRET.length > 0,
+    internalAlgoEnabled: parsed.SVC_TOKEN_ALGO.length > 0,
   };
 }

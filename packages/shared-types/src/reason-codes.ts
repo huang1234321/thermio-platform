@@ -73,6 +73,17 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  *   platform §10 在用码，与 M1 单资源 asset.not_found 的分工见 M3-monitor R4）；
  * - stream.server_busy（503，SSE 每实例并发连接 ≥100，响应附 Retry-After: 5，M3-monitor R5）。
  *
+ * 七批注册（IMPL-17 / DAT-163，建议提交与审批，modules/M5-proposal.md §1.2 落码值逐字；
+ * 并集注记：八批（IMPL-15 / DAT-118 import 八码）与本批并行开发同号合入，编号顺延自此起算）：
+ * - proposal.not_found（404，SEC-AZ-03 越权同码；execution 从属视图同码）；
+ * - proposal.state_invalid（409，已决策再 approve/reject，details.current_status）；
+ * - proposal.expired（409，approve/reject 时 expires_at 已过且仍 pending）；
+ * - proposal.payload_invalid（422，internal 提交信封失败/必填缺失/target 解析零命中或
+ *   歧义，细分 details.cause）；
+ * - proposal.reason_required（422，reject 缺 reason——独立于 validation_failed 便于定位）；
+ * - proposal.client_ref_duplicate（409，同 client_ref 信封不一致重放；〔R2〕依赖码，
+ *   DDL 落列前不启用——注册占位随发版纪律先行）。
+ *
  * 五批注册（IMPL-13 / DAT-116，告警引擎与告警中心，modules M4-alarm.md §1.2 落码值逐字）：
  * - alarm.not_found（404，SEC-AZ-03 越权同码；种子仅 rule_not_found）；
  * - alarm.state_invalid（409，状态机非法迁移）；
@@ -140,6 +151,12 @@ export const REASON_CODES = [
   'stream.limit_exceeded',
   'point.not_found',
   'stream.server_busy',
+  'proposal.not_found',
+  'proposal.state_invalid',
+  'proposal.expired',
+  'proposal.payload_invalid',
+  'proposal.reason_required',
+  'proposal.client_ref_duplicate',
   'import.not_found',
   'import.state_invalid',
   'import.file_invalid',
@@ -441,6 +458,40 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 503,
     description:
       'SSE 每实例并发连接达上限（platform §12：≤100；响应附 Retry-After: 5，客户端退避重连任意实例，M3-monitor R5）',
+  },
+  'proposal.not_found': {
+    domain: 'proposal',
+    http: 404,
+    description:
+      '建议不存在或越权（SEC-AZ-03 同码同文案；execution 为 proposal 从属视图，无独立 404 语义，M5 §1.2）',
+  },
+  'proposal.state_invalid': {
+    domain: 'proposal',
+    http: 409,
+    description: '已决策（approved/rejected/expired/executed/failed）再 approve/reject（M5 §1.2）',
+  },
+  'proposal.expired': {
+    domain: 'proposal',
+    http: 409,
+    description: 'approve/reject 时 expires_at 已过且仍 pending（sweeper 60s 收敛，M5 §4.2）',
+  },
+  'proposal.payload_invalid': {
+    domain: 'proposal',
+    http: 422,
+    description:
+      'internal 提交信封失败：必填缺失 / expires_at 非法或已过 / target 解析零命中或歧义（细分 details.cause，M5 §1.3）',
+  },
+  'proposal.reason_required': {
+    domain: 'proposal',
+    http: 422,
+    description:
+      'reject 请求体缺 reason（PRD D1 驳回必填；独立于 validation_failed，M5 §1.2〔R6〕）',
+  },
+  'proposal.client_ref_duplicate': {
+    domain: 'proposal',
+    http: 409,
+    description:
+      'internal 提交同 client_ref 信封不一致重放（幂等重放应 201；M5 §1.2〔R2〕——DDL 落列前不启用，注册占位）',
   },
   'import.not_found': {
     domain: 'import',

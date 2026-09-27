@@ -32,6 +32,9 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
  *
  * IMPL-13 增量（M7-auth §4.1 定稿键名逐字，M4-alarm.md §1.5）：
  * alarms.ack（operator+）/ alarms.suppress（admin）/ alarm_rules.write（admin）。
+ *
+ * IMPL-17 增量（M5-proposal.md §1.5 定稿键名逐字）：
+ * proposals.decide.write（operator+：approve/reject）。
  */
 export const CAPABILITIES = [
   'monitor.read',
@@ -40,6 +43,7 @@ export const CAPABILITIES = [
   'alarms.suppress',
   'alarm_rules.write',
   'proposals.read',
+  'proposals.decide.write',
   'fdd.read',
   'assets.read',
   'assets.write',
@@ -88,12 +92,19 @@ const VIEWER_CAPABILITIES: readonly Capability[] = [
  */
 export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = {
   viewer: VIEWER_CAPABILITIES,
-  operator: [...VIEWER_CAPABILITIES, 'imports.write', 'points.semantics.write', 'alarms.ack'],
+  operator: [
+    ...VIEWER_CAPABILITIES,
+    'imports.write',
+    'points.semantics.write',
+    'alarms.ack',
+    'proposals.decide.write',
+  ],
   admin: [
     ...VIEWER_CAPABILITIES,
     'imports.write',
     'points.semantics.write',
     'alarms.ack',
+    'proposals.decide.write',
     'alarms.suppress',
     'alarm_rules.write',
     'assets.write',

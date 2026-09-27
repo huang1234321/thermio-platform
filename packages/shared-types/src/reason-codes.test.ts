@@ -34,10 +34,12 @@ describe('reason_code registry', () => {
     //   suppress_duration_invalid / rule_scope_invalid / rule_params_invalid /
     //   rule_type_unknown / severity_unknown / rule_in_use）。
     // + IMPL-14 三码（DAT-117，M3-monitor.md §1.2：stream.limit_exceeded /
-    //   point.not_found / stream.server_busy）
+    //   point.not_found / stream.server_busy）。
     // + IMPL-15 八码（DAT-118，M2-import §1.2 增量：import.* 全域八码——
     //   template_mismatch 不落 HTTP 码，由作业 failure.code 承载故不在表）。
-    expect(REASON_CODES).toHaveLength(60);
+    // + IMPL-17 六码（DAT-163，M5-proposal.md §1.2：proposal.not_found / state_invalid /
+    //   expired / payload_invalid / reason_required / client_ref_duplicate〔R2 占位〕）。
+    expect(REASON_CODES).toHaveLength(66);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

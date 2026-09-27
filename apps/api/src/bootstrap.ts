@@ -25,6 +25,7 @@ export function configureApp(app: INestApplication): INestApplication {
       'internal/fdd/findings',
       'internal/fdd/reports',
       'internal/algo/asset-snapshot',
+      'internal/control/leases/heartbeat',
     ],
   });
   app.enableShutdownHooks();

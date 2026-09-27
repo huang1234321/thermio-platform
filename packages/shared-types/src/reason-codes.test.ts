@@ -4,6 +4,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   GATE_CAUSES,
+  GATE_CAUSE_LABELS,
   OVERVIEW_DESIGN_CODE_ALIASES,
   REASON_CODES,
   REASON_CODE_REGISTRY,
@@ -39,7 +40,9 @@ describe('reason_code registry', () => {
     //   template_mismatch 不落 HTTP 码，由作业 failure.code 承载故不在表）。
     // + IMPL-17 六码（DAT-163，M5-proposal.md §1.2：proposal.not_found / state_invalid /
     //   expired / payload_invalid / reason_required / client_ref_duplicate〔R2 占位〕）。
-    expect(REASON_CODES).toHaveLength(66);
+    // + IMPL-18 闸门改名净增 2 + M8 七码（DAT-164：v1.5 改名〔R1，DAT-132〕旧五码
+    //   → 新五码 + 溢出/超时两子码；overview §4 M8 码列 point.* 七码注册）。
+    expect(REASON_CODES).toHaveLength(75);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {
@@ -54,18 +57,28 @@ describe('reason_code registry', () => {
     expect(isReasonCode('proposal.gate_clamped_x')).toBe(false);
     expect(httpStatusForReasonCode('proposal.gate_clamped')).toBe(200);
     expect(httpStatusForReasonCode('proposal.gate_rate_limited')).toBe(429);
-    expect(httpStatusForReasonCode('proposal.gate_circuit_open')).toBe(503);
+    expect(httpStatusForReasonCode('proposal.gate_system_fused')).toBe(503);
+    expect(httpStatusForReasonCode('proposal.gate_conflict_queued')).toBe(409);
+    expect(httpStatusForReasonCode('proposal.gate_conflict_overflow')).toBe(409);
     expect(httpStatusForReasonCode('common.internal_error')).toBe(500);
     expect(httpStatusForReasonCode('common.validation_failed')).toBe(422);
     expect(httpStatusForReasonCode('common.not_found')).toBe(404);
+    // 旧码随 v1.5 改名退役（IMPL-18 前无消费方，退役无破坏面）
+    expect(isReasonCode('proposal.gate_circuit_open')).toBe(false);
+    expect(isReasonCode('proposal.gate_not_whitelisted')).toBe(false);
   });
 
-  it('shouldTagExactlyFiveGates_withCauseSubstringsAsMetricLabels', () => {
-    expect(GATE_CAUSES).toHaveLength(5);
+  it('shouldTagEveryGateCause_withMappedMetricLabel', () => {
+    // v1.5（platform.md §5.2〔R1，DAT-132〕）：label = cause 的闸门子串，
+    // 闸门 4 三码同 conflict，clamp 非拒绝由独立计数器消费。
+    expect(GATE_CAUSES).toHaveLength(7);
     for (const cause of GATE_CAUSES) {
       const meta = REASON_CODE_REGISTRY[`proposal.${cause}` as const];
-      expect(meta.gate).toBe(cause);
+      expect(meta.gate).toBe(GATE_CAUSE_LABELS[cause]);
     }
+    expect(GATE_CAUSE_LABELS.gate_conflict_queued).toBe('conflict');
+    expect(GATE_CAUSE_LABELS.gate_conflict_overflow).toBe('conflict');
+    expect(GATE_CAUSE_LABELS.gate_conflict_timeout).toBe('conflict');
   });
 });
 
@@ -93,7 +106,7 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES（§8 对齐事项 1 映射表）', () =>
     expect(OVERVIEW_DESIGN_CODE_ALIASES['POINT_NOT_FOUND']).toBe('asset.not_found');
     expect(OVERVIEW_DESIGN_CODE_ALIASES['ALARM_RULE_NOT_FOUND']).toBe('alarm.rule_not_found');
     expect(OVERVIEW_DESIGN_CODE_ALIASES['PROPOSAL_GATE_SYSTEM_FUSED']).toBe(
-      'proposal.gate_circuit_open',
+      'proposal.gate_system_fused',
     );
   });
 

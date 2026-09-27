@@ -248,6 +248,20 @@ export const QUALITY_EVENTS = ['stale_set', 'stale_clear', 'ts_skew', 'unit_unco
 export const QualityEventSchema = z.enum(QUALITY_EVENTS);
 export type QualityEvent = z.infer<typeof QualityEventSchema>;
 
+// 熔断域（DAT-104 管道：随消费方 IMPL-18/DAT-164 落地，对照时点 2026-09-27；
+// 取值唯一来源 = platform.md §6.3 v1.1 清单 × ddl.md §9.4 0003 CHECK 原文，零自造）
+// ---------------------------------------------------------------------------
+
+/** 熔断状态机（ddl.md §9.4 control_fuse.status CHECK；无 half-open，§9.3 定夺）。 */
+export const CONTROL_FUSE_STATUSES = ['closed', 'open'] as const;
+export const ControlFuseStatusSchema = z.enum(CONTROL_FUSE_STATUSES);
+export type ControlFuseStatus = (typeof CONTROL_FUSE_STATUSES)[number];
+
+/** 熔断事件类型（ddl.md §9.4 control_fuse_event.event_type CHECK：触发/解除留痕）。 */
+export const CONTROL_FUSE_EVENT_TYPES = ['tripped', 'released'] as const;
+export const ControlFuseEventTypeSchema = z.enum(CONTROL_FUSE_EVENT_TYPES);
+export type ControlFuseEventType = (typeof CONTROL_FUSE_EVENT_TYPES)[number];
+
 // 导入域（M2 点表导入；platform.md §6.3 v1.1 增补，源头 = ddl.md §9.1 CHECK 集，
 // 非 DATA-MODEL v1.1——DAT-104 管道：随消费方 IMPL-15 落地，对照时点 2026-09-27）
 // ---------------------------------------------------------------------------

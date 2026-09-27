@@ -14,6 +14,8 @@ import {
   BUILDING_TYPES,
   CONFIG_AUDIT_FIELDS,
   CONTROL_ACTOR_TYPES,
+  CONTROL_FUSE_EVENT_TYPES,
+  CONTROL_FUSE_STATUSES,
   CONTROL_MODES,
   CONTROL_RESULTS,
   DEPLOYMENT_MODES,
@@ -39,6 +41,8 @@ import {
   AlarmScopeSchema,
   AlarmSeveritySchema,
   BuildingTypeSchema,
+  ControlFuseEventTypeSchema,
+  ControlFuseStatusSchema,
   FddFindingStatusSchema,
   FddReportPeriodTypeSchema,
   ControlModeSchema,
@@ -59,6 +63,8 @@ import {
   type BuildingType,
   type ConfigAuditField,
   type ControlActorType,
+  type ControlFuseEventType,
+  type ControlFuseStatus,
   type ControlMode,
   type ControlResult,
   type DeploymentMode,
@@ -108,6 +114,9 @@ const ENUM_REGISTRY = {
   ALARM_CLOSE_REASONS_SYSTEM,
   ALARM_SUPPRESSION_END_REASONS,
   QUALITY_EVENTS,
+  // 熔断域（DAT-104 管道：随消费方 IMPL-18/DAT-164 落地）
+  CONTROL_FUSE_STATUSES,
+  CONTROL_FUSE_EVENT_TYPES,
   // 导入域（DAT-104 随消费方 IMPL-15/DAT-118 落地；platform.md §6.3 v1.1 × ddl.md §9.1）
   IMPORT_JOB_STATUSES,
   IMPORT_ROW_MAP_STATUSES,
@@ -180,6 +189,14 @@ describe('enum registry snapshot', () => {
           "algo",
           "human",
           "system",
+        ],
+        "CONTROL_FUSE_EVENT_TYPES": [
+          "tripped",
+          "released",
+        ],
+        "CONTROL_FUSE_STATUSES": [
+          "closed",
+          "open",
         ],
         "CONTROL_MODES": [
           "advisory",
@@ -318,6 +335,8 @@ describe('enum schema/type single source (platform.md §5.3)', () => {
     expectTypeOf<ControlActorType>().toEqualTypeOf<(typeof CONTROL_ACTOR_TYPES)[number]>();
     expectTypeOf<ControlResult>().toEqualTypeOf<(typeof CONTROL_RESULTS)[number]>();
     expectTypeOf<ConfigAuditField>().toEqualTypeOf<(typeof CONFIG_AUDIT_FIELDS)[number]>();
+    expectTypeOf<ControlFuseStatus>().toEqualTypeOf<(typeof CONTROL_FUSE_STATUSES)[number]>();
+    expectTypeOf<ControlFuseEventType>().toEqualTypeOf<(typeof CONTROL_FUSE_EVENT_TYPES)[number]>();
     expectTypeOf<FddFindingStatus>().toEqualTypeOf<(typeof FDD_FINDING_STATUSES)[number]>();
     expectTypeOf<FddReportPeriodType>().toEqualTypeOf<(typeof FDD_REPORT_PERIOD_TYPES)[number]>();
     expectTypeOf<MvBaselineStatus>().toEqualTypeOf<(typeof MV_BASELINE_STATUSES)[number]>();
@@ -358,6 +377,9 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     // FDD 域（IMPL-17 并入项，DAT-104 管道同步覆盖）
     expect(FddFindingStatusSchema.safeParse('closed').success).toBe(false);
     expect(FddReportPeriodTypeSchema.safeParse('month').success).toBe(false);
+    // 熔断域（DAT-104：随 IMPL-18 落地的两组；half_open 为 ddl §9.3 显式排除态）
+    expect(ControlFuseStatusSchema.safeParse('half_open').success).toBe(false);
+    expect(ControlFuseEventTypeSchema.safeParse('cooldown').success).toBe(false);
     // 导入域（DAT-104：随 IMPL-15 落地的两组 + 两个封闭集）
     expect(ImportJobStatusSchema.safeParse('importing').success).toBe(false);
     expect(ImportRowMapStatusSchema.safeParse('skipped').success).toBe(false);
@@ -374,6 +396,11 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmScopeSchema.safeParse('gateway').success).toBe(true);
     expect(FddFindingStatusSchema.safeParse('ignored').success).toBe(true);
     expect(FddReportPeriodTypeSchema.safeParse('week').success).toBe(true);
+    // 熔断域（DAT-104：随 IMPL-18 落地）
+    expect(ControlFuseStatusSchema.safeParse('open').success).toBe(true);
+    expect(ControlFuseStatusSchema.safeParse('closed').success).toBe(true);
+    expect(ControlFuseEventTypeSchema.safeParse('tripped').success).toBe(true);
+    expect(ControlFuseEventTypeSchema.safeParse('released').success).toBe(true);
     expect(ImportJobStatusSchema.safeParse('validated').success).toBe(true);
     expect(ImportRowMapStatusSchema.safeParse('manual').success).toBe(true);
   });

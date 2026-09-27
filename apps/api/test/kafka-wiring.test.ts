@@ -52,7 +52,7 @@ describe('consumeExecutedValue（executed 消费骨架）', () => {
   it('shouldRecordTheDecision_whenResultIsInControlResults', () => {
     const metrics = new MetricsService();
     const recorded = consumeExecutedValue(
-      JSON.stringify({ proposal_id: 'pp_1', result: 'ok' }),
+      JSON.stringify({ proposal_id: 'pp_1', outcome: 'executed' }),
       'trc_1',
       logger,
       (decision) => {
@@ -64,12 +64,17 @@ describe('consumeExecutedValue（executed 消费骨架）', () => {
 
   it('shouldNotCrashTheLoop_whenPayloadIsMalformedOrUnknownResult', () => {
     expect(
-      consumeExecutedValue('{"proposal_id": "pp_2", "result": "ok"', 'trc_2', logger, () => {}),
+      consumeExecutedValue(
+        '{"proposal_id": "pp_2", "outcome": "executed"',
+        'trc_2',
+        logger,
+        () => {},
+      ),
     ).toBe(false);
     expect(consumeExecutedValue(undefined, null, logger, () => {})).toBe(false);
     expect(
       consumeExecutedValue(
-        JSON.stringify({ proposal_id: 'pp_3', result: 'mystery' }),
+        JSON.stringify({ proposal_id: 'pp_3', outcome: 'mystery' }),
         'trc_3',
         logger,
         () => {},

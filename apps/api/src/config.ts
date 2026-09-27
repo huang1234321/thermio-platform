@@ -11,6 +11,23 @@
  *   （telemetry.store_unavailable），服务本体照常起（与 kafka 同一停用形态）。
  */
 import {
+  CONTROL_ACK_TIMEOUT_S,
+  CONTROL_CONFLICT_QUEUE_MAX,
+  CONTROL_CONFLICT_WAIT_TIMEOUT_S,
+  CONTROL_EXECUTION_BUDGET_S,
+  CONTROL_FUSE_CONSECUTIVE_FAILS,
+  CONTROL_FUSE_COOLDOWN_S,
+  CONTROL_FUSE_EVAL_INTERVAL_S,
+  CONTROL_FUSE_RATE_THRESHOLD,
+  CONTROL_FUSE_RELEASE_RATE,
+  CONTROL_FUSE_WINDOW_S,
+  CONTROL_LEASE_SWEEP_INTERVAL_S,
+  CONTROL_LEASE_TTL_S,
+  CONTROL_RATE_LIMIT_DEFAULT,
+  CONTROL_READ_TIMEOUT_S,
+  CONTROL_VERIFY_DELAY_S,
+  CONTROL_VERIFY_TOLERANCE,
+  CONTROL_WRITE_RETRY_MAX,
   STREAM_LIMITS,
   TELEMETRY_SPAN_LIMIT_DAYS,
   type TelemetryInterval,
@@ -141,6 +158,73 @@ const AppConfigSchema = z.object({
    */
   PROPOSAL_MOCK_EXECUTOR: z.enum(['off', 'on']).default('off'),
   PROPOSAL_MOCK_EXECUTOR_DELAY_MS: z.coerce.number().int().min(0).default(1_500),
+  // ── control-safety 执行链（control-safety.md §11，IMPL-18 / DAT-164）──
+  // 承载定夺：api 应用配置（CONTROL_SAFETY__ 前缀 env 可覆盖）+ shared-types 常量
+  // 钉死默认值（CONTROL_SAFETY_PARAMS 快照测试）——不建 PG 参数表（§11 定夺）。
+  CONTROL_SAFETY__VERIFY_DELAY_S: z.coerce.number().int().min(0).default(CONTROL_VERIFY_DELAY_S),
+  CONTROL_SAFETY__READ_TIMEOUT_S: z.coerce.number().int().min(1).default(CONTROL_READ_TIMEOUT_S),
+  CONTROL_SAFETY__ACK_TIMEOUT_S: z.coerce.number().int().min(1).default(CONTROL_ACK_TIMEOUT_S),
+  CONTROL_SAFETY__VERIFY_TOLERANCE: z.coerce.number().min(0).default(CONTROL_VERIFY_TOLERANCE),
+  CONTROL_SAFETY__WRITE_RETRY_MAX: z.coerce.number().int().min(0).default(CONTROL_WRITE_RETRY_MAX),
+  CONTROL_SAFETY__EXECUTION_BUDGET_S: z.coerce
+    .number()
+    .int()
+    .min(10)
+    .default(CONTROL_EXECUTION_BUDGET_S),
+  CONTROL_SAFETY__CONFLICT_QUEUE_MAX: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(CONTROL_CONFLICT_QUEUE_MAX),
+  CONTROL_SAFETY__CONFLICT_WAIT_TIMEOUT_S: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(CONTROL_CONFLICT_WAIT_TIMEOUT_S),
+  CONTROL_SAFETY__RATE_LIMIT_PER_HOUR_DEFAULT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(CONTROL_RATE_LIMIT_DEFAULT),
+  CONTROL_SAFETY__LEASE_TTL_S: z.coerce.number().int().min(30).default(CONTROL_LEASE_TTL_S),
+  CONTROL_SAFETY__LEASE_SWEEP_INTERVAL_S: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .default(CONTROL_LEASE_SWEEP_INTERVAL_S),
+  CONTROL_SAFETY__FUSE_EVAL_INTERVAL_S: z.coerce
+    .number()
+    .int()
+    .min(5)
+    .default(CONTROL_FUSE_EVAL_INTERVAL_S),
+  CONTROL_SAFETY__FUSE_WINDOW_S: z.coerce.number().int().min(60).default(CONTROL_FUSE_WINDOW_S),
+  CONTROL_SAFETY__FUSE_RATE_THRESHOLD: z.coerce
+    .number()
+    .min(0)
+    .max(1)
+    .default(CONTROL_FUSE_RATE_THRESHOLD),
+  CONTROL_SAFETY__FUSE_CONSECUTIVE_FAILS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(CONTROL_FUSE_CONSECUTIVE_FAILS),
+  CONTROL_SAFETY__FUSE_RELEASE_RATE: z.coerce
+    .number()
+    .min(0)
+    .max(1)
+    .default(CONTROL_FUSE_RELEASE_RATE),
+  CONTROL_SAFETY__FUSE_COOLDOWN_S: z.coerce.number().int().min(60).default(CONTROL_FUSE_COOLDOWN_S),
+  // svc-control 内部账号（emqx.md §4；ACL 由 deploy/emqx/acl.conf 承载〔R2〕）。
+  // 未设置 = 通道停用（执行链降级：仲裁照常，下行发布失败走 verify_failed 路径
+  // ——§4.4 发布异常语义），与 MQTT_BROKER_URL 同款纪律。
+  CONTROL_MQTT_BROKER_URL: z.string().default(''),
+  CONTROL_MQTT_USERNAME: z.string().default('svc-control'),
+  CONTROL_MQTT_PASSWORD: z.string().default(''),
+  CONTROL_MQTT_CLIENT_ID: z.string().min(1).default('thermio-api-control'),
+  /** dispatcher 扫描兜底节奏（§1 后台任务表；事件触发为主，扫描为兜底）。 */
+  CONTROL_DISPATCH_SCAN_INTERVAL_MS: z.coerce.number().int().min(100).default(10_000),
+  /** reconciler 周期（§5.5 24h 任务；测试可压小）。 */
+  CONTROL_RECONCILE_INTERVAL_MS: z.coerce.number().int().min(1_000).default(86_400_000),
 });
 
 export interface AppConfig extends z.infer<typeof AppConfigSchema> {
@@ -164,6 +248,28 @@ export interface AppConfig extends z.infer<typeof AppConfigSchema> {
   readonly authEnabled: boolean;
   /** /internal/* algo 面是否启用（SVC_TOKEN_ALGO 已配置）。 */
   readonly internalAlgoEnabled: boolean;
+  /** control-safety 执行链参数（§11 env 覆盖后的生效值）。 */
+  readonly controlSafety: {
+    readonly verifyDelayS: number;
+    readonly readTimeoutS: number;
+    readonly ackTimeoutS: number;
+    readonly verifyTolerance: number;
+    readonly writeRetryMax: number;
+    readonly executionBudgetS: number;
+    readonly conflictQueueMax: number;
+    readonly conflictWaitTimeoutS: number;
+    readonly rateLimitDefault: number;
+    readonly leaseTtlS: number;
+    readonly leaseSweepIntervalS: number;
+    readonly fuseEvalIntervalS: number;
+    readonly fuseWindowS: number;
+    readonly fuseRateThreshold: number;
+    readonly fuseConsecutiveFails: number;
+    readonly fuseReleaseRate: number;
+    readonly fuseCooldownS: number;
+  };
+  /** svc-control MQTT 通道是否启用（CONTROL_MQTT_BROKER_URL 非空）。 */
+  readonly controlChannelEnabled: boolean;
 }
 
 /** 解析并校验环境变量；畸形值直接失败快（启动期报错优于运行期漂移）。 */
@@ -199,5 +305,25 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       parsed.PG_AUTH_URL.length > 0 &&
       parsed.AUTH_JWT_SECRET.length > 0,
     internalAlgoEnabled: parsed.SVC_TOKEN_ALGO.length > 0,
+    controlSafety: {
+      verifyDelayS: parsed['CONTROL_SAFETY__VERIFY_DELAY_S'],
+      readTimeoutS: parsed['CONTROL_SAFETY__READ_TIMEOUT_S'],
+      ackTimeoutS: parsed['CONTROL_SAFETY__ACK_TIMEOUT_S'],
+      verifyTolerance: parsed['CONTROL_SAFETY__VERIFY_TOLERANCE'],
+      writeRetryMax: parsed['CONTROL_SAFETY__WRITE_RETRY_MAX'],
+      executionBudgetS: parsed['CONTROL_SAFETY__EXECUTION_BUDGET_S'],
+      conflictQueueMax: parsed['CONTROL_SAFETY__CONFLICT_QUEUE_MAX'],
+      conflictWaitTimeoutS: parsed['CONTROL_SAFETY__CONFLICT_WAIT_TIMEOUT_S'],
+      rateLimitDefault: parsed['CONTROL_SAFETY__RATE_LIMIT_PER_HOUR_DEFAULT'],
+      leaseTtlS: parsed['CONTROL_SAFETY__LEASE_TTL_S'],
+      leaseSweepIntervalS: parsed['CONTROL_SAFETY__LEASE_SWEEP_INTERVAL_S'],
+      fuseEvalIntervalS: parsed['CONTROL_SAFETY__FUSE_EVAL_INTERVAL_S'],
+      fuseWindowS: parsed['CONTROL_SAFETY__FUSE_WINDOW_S'],
+      fuseRateThreshold: parsed['CONTROL_SAFETY__FUSE_RATE_THRESHOLD'],
+      fuseConsecutiveFails: parsed['CONTROL_SAFETY__FUSE_CONSECUTIVE_FAILS'],
+      fuseReleaseRate: parsed['CONTROL_SAFETY__FUSE_RELEASE_RATE'],
+      fuseCooldownS: parsed['CONTROL_SAFETY__FUSE_COOLDOWN_S'],
+    },
+    controlChannelEnabled: parsed.CONTROL_MQTT_BROKER_URL.length > 0,
   };
 }

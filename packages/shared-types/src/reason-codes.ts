@@ -13,26 +13,54 @@
 import { z } from 'zod';
 import { ALARM_SUPPRESS_DURATION_S } from './enums.js';
 
-/** 五道闸门的 cause 子串（ADR-009；§5.2「与 ADR-017 的咬合」）。 */
+/**
+ * 五道闸门的 cause 子串（ADR-009；§5.2「与 ADR-017 的咬合」）。
+ * v1.5 改名（platform.md §5.2〔R1，DAT-132〕）：`gate_not_whitelisted` →
+ * `gate_whitelist_denied`、`gate_circuit_open` → `gate_system_fused`、
+ * `gate_conflict` → `gate_conflict_queued`，闸门 4 增溢出/超时两个拒绝子码——
+ * 旧五码此前无消费方（IMPL-17 不触闸门），随 IMPL-18 一次入库。
+ */
 export const GATE_CAUSES = [
-  'gate_not_whitelisted',
+  'gate_whitelist_denied',
   'gate_clamped',
   'gate_rate_limited',
-  'gate_conflict',
-  'gate_circuit_open',
+  'gate_conflict_queued',
+  'gate_conflict_overflow',
+  'gate_conflict_timeout',
+  'gate_system_fused',
 ] as const;
 export type GateCause = (typeof GATE_CAUSES)[number];
+
+/**
+ * 指标 label 值域（platform.md §5.2 v1.5/§7：label = cause 的闸门子串；
+ * 闸门 4 三码同 `conflict`；clamp 非拒绝，独立计数器同用本值域）。
+ */
+export const GATE_LABELS = ['whitelist', 'clamp', 'rate', 'conflict', 'fuse'] as const;
+export type GateLabel = (typeof GATE_LABELS)[number];
+
+/** cause → 指标 label 机械映射（§5.2「label 取值 = gate_* cause 的闸门子串」）。 */
+export const GATE_CAUSE_LABELS: Readonly<Record<GateCause, GateLabel>> = {
+  gate_whitelist_denied: 'whitelist',
+  gate_clamped: 'clamp',
+  gate_rate_limited: 'rate',
+  gate_conflict_queued: 'conflict',
+  gate_conflict_overflow: 'conflict',
+  gate_conflict_timeout: 'conflict',
+  gate_system_fused: 'fuse',
+};
 
 /**
  * 闸门 reason_code（`proposal.<cause>`）。与 GATE_CAUSES 的同源性不由类型推导
  * （map 会丢字面量元组），由 reason-codes.test.ts 钉死：改一处必须同步另一处。
  */
 export const PROPOSAL_GATE_REASON_CODES = [
-  'proposal.gate_not_whitelisted',
+  'proposal.gate_whitelist_denied',
   'proposal.gate_clamped',
   'proposal.gate_rate_limited',
-  'proposal.gate_conflict',
-  'proposal.gate_circuit_open',
+  'proposal.gate_conflict_queued',
+  'proposal.gate_conflict_overflow',
+  'proposal.gate_conflict_timeout',
+  'proposal.gate_system_fused',
 ] as const;
 export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number];
 
@@ -134,6 +162,15 @@ export const REASON_CODES = [
   'point.not_controllable',
   'point.write_not_numeric',
   ...PROPOSAL_GATE_REASON_CODES,
+  // M8 控制安全域（IMPL-18 / DAT-164 注册；overview §4 M8 码列机械映射，
+  // 规式第 4 条：闸门参数/模式为 point 实体字段 → point.* 域）
+  'point.gate_reason_required',
+  'point.gate_clamp_range_invalid',
+  'point.gate_controllable_requires_clamp',
+  'point.gate_rate_invalid',
+  'point.control_mode_transition_invalid',
+  'point.control_mode_same',
+  'point.control_mode_point_not_controllable',
   'mv.baseline_not_active',
   'mv.period_invalid',
   'alarm.rule_not_found',
@@ -174,8 +211,11 @@ export type ReasonCode = (typeof REASON_CODES)[number];
 export interface ReasonCodeMeta {
   readonly domain: string;
   readonly http: number;
-  /** 闸门码：cause 子串同时是 thermio_gate_rejections_total{gate} 的 label 值。 */
-  readonly gate?: GateCause;
+  /**
+   * 闸门码：`thermio_gate_rejections_total{gate}` / `thermio_gate_clamped_total{gate}`
+   * 的 label 值（GATE_CAUSE_LABELS 机械映射；clamp 非拒绝走独立计数器）。
+   */
+  readonly gate?: GateLabel;
   readonly description: string;
 }
 
@@ -339,35 +379,87 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 422,
     description: '写入值非数值（可写点限数值量）',
   },
-  'proposal.gate_not_whitelisted': {
+  'proposal.gate_whitelist_denied': {
     domain: 'proposal',
     http: 409,
-    gate: 'gate_not_whitelisted',
-    description: '闸门 1：受控白名单拒绝',
+    gate: 'whitelist',
+    description:
+      '闸门 1：受控白名单拒绝（v1.5 改名〔R1，DAT-132〕，旧码 gate_not_whitelisted 随 IMPL-18 退役）',
   },
   'proposal.gate_clamped': {
     domain: 'proposal',
     http: 200,
-    gate: 'gate_clamped',
+    gate: 'clamp',
     description: '闸门 2：值域 clamp（执行成功但被夹紧，details 带夹紧前后值；2xx 语义）',
   },
   'proposal.gate_rate_limited': {
     domain: 'proposal',
     http: 429,
-    gate: 'gate_rate_limited',
+    gate: 'rate',
     description: '闸门 3：频率限制',
   },
-  'proposal.gate_conflict': {
+  'proposal.gate_conflict_queued': {
     domain: 'proposal',
     http: 409,
-    gate: 'gate_conflict',
-    description: '闸门 4：同设备冲突提案排队',
+    gate: 'conflict',
+    description: '闸门 4：同设备冲突提案排队（排队非失败；v1.5 改名〔R1，DAT-132〕）',
   },
-  'proposal.gate_circuit_open': {
+  'proposal.gate_conflict_overflow': {
+    domain: 'proposal',
+    http: 409,
+    gate: 'conflict',
+    description:
+      '闸门 4 拒绝子分支：排队溢出（>CONFLICT_QUEUE_MAX）→ status=failed（v1.5 入表〔R1，DAT-132〕）',
+  },
+  'proposal.gate_conflict_timeout': {
+    domain: 'proposal',
+    http: 409,
+    gate: 'conflict',
+    description:
+      '闸门 4 拒绝子分支：排队等待超时（>CONFLICT_WAIT_TIMEOUT_S）→ status=failed（异步面终态；v1.5 入表〔R1，DAT-132〕）',
+  },
+  'proposal.gate_system_fused': {
     domain: 'proposal',
     http: 503,
-    gate: 'gate_circuit_open',
-    description: '闸门 5：全局熔断，系统降级 advisory',
+    gate: 'fuse',
+    description:
+      '闸门 5：全局熔断，系统降级 advisory（v1.5 改名〔R1，DAT-132〕，旧码 gate_circuit_open 随 IMPL-18 退役）',
+  },
+  'point.gate_reason_required': {
+    domain: 'point',
+    http: 422,
+    description: 'M8 闸门参数编辑/模式切换缺 reason（flows §4 reason 必填；IMPL-18 注册）',
+  },
+  'point.gate_clamp_range_invalid': {
+    domain: 'point',
+    http: 422,
+    description: 'clamp_min ≥ clamp_max 或与 valid_range 矛盾（overview M8；IMPL-18 注册）',
+  },
+  'point.gate_controllable_requires_clamp': {
+    domain: 'point',
+    http: 422,
+    description: '开启受控白名单必须先有值域（overview M8；IMPL-18 注册）',
+  },
+  'point.gate_rate_invalid': {
+    domain: 'point',
+    http: 422,
+    description: '频率上限值非法（可控点必填频率上限，R8 语义扩展〔DAT-132〕；IMPL-18 注册）',
+  },
+  'point.control_mode_transition_invalid': {
+    domain: 'point',
+    http: 409,
+    description:
+      '控制模式非法迁移：前进跳档（details.cause=skip）或熔断期间前进封锁（details.cause=fuse_open，〔R6，DAT-132〕；IMPL-18 注册）',
+  },
+  'point.control_mode_same': {
+    domain: 'point',
+    http: 409,
+    description: '控制模式目标档 = 当前档（并发兜底；IMPL-18 注册）',
+  },
+  'point.control_mode_point_not_controllable': {
+    domain: 'point',
+    http: 409,
+    description: 'supervised/auto 前提：点位已入受控白名单（overview M8；IMPL-18 注册）',
   },
   'mv.baseline_not_active': {
     domain: 'mv',
@@ -591,13 +683,14 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   CONFLICT: 'common.conflict',
   RATE_LIMITED: 'common.rate_limited', // platform.md §6 明示骨架码原字；IMPL-10 注册入种子表
   // ── 闸门 → 种子码（执行结果侧展示码，overview M5；与 §5.2 逐条对照）──
-  PROPOSAL_GATE_WHITELIST_DENIED: 'proposal.gate_not_whitelisted',
+  // v1.5 改名后三码均可机械直译（platform.md §5.2〔R1，DAT-132〕随 IMPL-18 落码；
+  // 旧同义异名收口注释退役——seed 已按机械映射结果钉死）
+  PROPOSAL_GATE_WHITELIST_DENIED: 'proposal.gate_whitelist_denied',
   PROPOSAL_GATE_RATE_LIMITED: 'proposal.gate_rate_limited',
-  PROPOSAL_GATE_CONFLICT_QUEUED: 'proposal.gate_conflict',
-  // 双名收口（DAT-92 评审建议 1）：本清单码（ddl.md §9.3 / flows.md §2）与 seed
-  // `proposal.gate_circuit_open`（v1.0 既有）同义异名——机械直译
-  // `proposal.gate_system_fused` 是非法码，映射以 seed 钉死的码为准（规式第 2 条）。
-  PROPOSAL_GATE_SYSTEM_FUSED: 'proposal.gate_circuit_open',
+  PROPOSAL_GATE_CONFLICT_QUEUED: 'proposal.gate_conflict_queued',
+  PROPOSAL_GATE_CONFLICT_OVERFLOW: 'proposal.gate_conflict_overflow',
+  PROPOSAL_GATE_CONFLICT_TIMEOUT: 'proposal.gate_conflict_timeout',
+  PROPOSAL_GATE_SYSTEM_FUSED: 'proposal.gate_system_fused',
   // ── 告警域 → 种子码 ──
   ALARM_RULE_NOT_FOUND: 'alarm.rule_not_found',
   // ── platform.md §5.2 明示的四个机械映射（目标为草案码，随模块落码注册；

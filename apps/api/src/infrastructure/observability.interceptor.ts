@@ -7,8 +7,8 @@
  *
  * 另含 GateClampedInterceptor：闸门 2「成功但被修正」走 200 + 信封形状（§5.2 注 *，
  * 非错误，不违反 API-ERR-03），与错误出口共用 buildEnvelope；联动
- * thermio_gate_rejections_total{gate="gate_clamped"}（§5.2：五闸门 label 含
- * gate_clamped——「介入」计数，与拒绝同维观测）。
+ * thermio_gate_clamped_total{gate="clamp"}（§5.2 v1.5〔R1，DAT-132〕：clamp 非拒绝，
+ * 独立计数器——不进 rejections）。
  */
 import {
   type CallHandler,
@@ -85,7 +85,7 @@ export class GateClampedInterceptor implements NestInterceptor {
     return next.handle().pipe(
       map((result: unknown) => {
         if (result instanceof GateClampedResult) {
-          this.metrics.recordGate('gate_clamped');
+          this.metrics.recordClamped();
           res.status(200).json(
             buildEnvelope({
               reason_code: 'proposal.gate_clamped',

@@ -3,7 +3,12 @@
  * 改种子表必须显式改快照——发版动作的 CI 面，评审可见。
  */
 import { describe, expect, it } from 'vitest';
-import { GATE_CAUSES, PROPOSAL_GATE_REASON_CODES, REASON_CODE_REGISTRY } from './reason-codes.js';
+import {
+  GATE_CAUSES,
+  GATE_CAUSE_LABELS,
+  PROPOSAL_GATE_REASON_CODES,
+  REASON_CODE_REGISTRY,
+} from './reason-codes.js';
 
 describe('reason_code registry snapshot', () => {
   it('shouldRequireExplicitSnapshotUpdate_whenAnySeedEntryChanges', () => {
@@ -136,8 +141,29 @@ describe('reason_code registry snapshot', () => {
         "mv.period_invalid": {
           "http": 422,
         },
+        "point.control_mode_point_not_controllable": {
+          "http": 409,
+        },
+        "point.control_mode_same": {
+          "http": 409,
+        },
+        "point.control_mode_transition_invalid": {
+          "http": 409,
+        },
         "point.field_not_allowed": {
           "http": 400,
+        },
+        "point.gate_clamp_range_invalid": {
+          "http": 422,
+        },
+        "point.gate_controllable_requires_clamp": {
+          "http": 422,
+        },
+        "point.gate_rate_invalid": {
+          "http": 422,
+        },
+        "point.gate_reason_required": {
+          "http": 422,
         },
         "point.no_data": {
           "http": 404,
@@ -160,25 +186,33 @@ describe('reason_code registry snapshot', () => {
         "proposal.expired": {
           "http": 409,
         },
-        "proposal.gate_circuit_open": {
-          "gate": "gate_circuit_open",
-          "http": 503,
-        },
         "proposal.gate_clamped": {
-          "gate": "gate_clamped",
+          "gate": "clamp",
           "http": 200,
         },
-        "proposal.gate_conflict": {
-          "gate": "gate_conflict",
+        "proposal.gate_conflict_overflow": {
+          "gate": "conflict",
           "http": 409,
         },
-        "proposal.gate_not_whitelisted": {
-          "gate": "gate_not_whitelisted",
+        "proposal.gate_conflict_queued": {
+          "gate": "conflict",
+          "http": 409,
+        },
+        "proposal.gate_conflict_timeout": {
+          "gate": "conflict",
           "http": 409,
         },
         "proposal.gate_rate_limited": {
-          "gate": "gate_rate_limited",
+          "gate": "rate",
           "http": 429,
+        },
+        "proposal.gate_system_fused": {
+          "gate": "fuse",
+          "http": 503,
+        },
+        "proposal.gate_whitelist_denied": {
+          "gate": "whitelist",
+          "http": 409,
         },
         "proposal.not_found": {
           "http": 404,
@@ -224,13 +258,16 @@ describe('reason_code registry snapshot', () => {
   });
 
   it('shouldKeepGateCausesAsTheSingleSource_whenDerivingGateCodesAndMetricLabels', () => {
-    // §5.2「与 ADR-017 的咬合」：五闸门 code 与指标 label 一次定义两处消费。
+    // §5.2「与 ADR-017 的咬合」（v1.5〔R1，DAT-132〕）：七 cause → label 机械映射，
+    // 闸门 4 三码同 conflict label——code 与指标 label 一次定义两处消费。
     expect([...PROPOSAL_GATE_REASON_CODES]).toEqual(
       GATE_CAUSES.map((cause) => `proposal.${cause}`),
     );
     const gateMeta = Object.values(REASON_CODE_REGISTRY)
       .filter((meta) => meta.gate !== undefined)
       .map((meta) => meta.gate);
-    expect(gateMeta).toEqual([...GATE_CAUSES]);
+    expect(gateMeta).toEqual(GATE_CAUSES.map((cause) => GATE_CAUSE_LABELS[cause]));
+    // label 值域封闭：whitelist/rate/conflict/fuse 拒绝 + clamp 独立计数
+    expect(new Set(gateMeta)).toEqual(new Set(['whitelist', 'clamp', 'rate', 'conflict', 'fuse']));
   });
 });

@@ -11,6 +11,7 @@
 import { Module } from '@nestjs/common';
 import { IdempotencyStore } from '../asset/idempotency.js';
 import { InternalAlgoModule } from '../internal-algo/internal-algo.module.js';
+import { ControlSafetyModule } from '../control-safety/control-safety.module.js';
 import { ProposalsController } from './proposals.controller.js';
 import { InternalProposalsController } from './internal-proposals.controller.js';
 import { ProposalsService } from './proposals.service.js';
@@ -19,7 +20,9 @@ import { ExpirySweeperService } from './expiry-sweeper.service.js';
 import { MockExecutionSettlerService } from './mock-execution.settler.js';
 
 @Module({
-  imports: [InternalAlgoModule],
+  // ControlSafetyModule：approve → 仲裁链即时 kick（IMPL-18 接通；单向依赖——
+  // control-safety 不反向 import 本模块，提案读写经 SQL 直达）。
+  imports: [InternalAlgoModule, ControlSafetyModule],
   controllers: [ProposalsController, InternalProposalsController],
   providers: [
     ProposalsService,

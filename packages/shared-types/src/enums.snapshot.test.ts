@@ -273,6 +273,13 @@ describe('enum registry snapshot', () => {
           "run_status",
           "energy",
           "load_rate",
+          "chw_supply_temp_setpoint",
+          "chw_return_temp",
+          "chw_flow_rate",
+          "unit_enable",
+          "cooling_water_supply_temp",
+          "cw_supply_temp_setpoint",
+          "tower_fan_power",
         ],
         "ROLES": [
           "admin",

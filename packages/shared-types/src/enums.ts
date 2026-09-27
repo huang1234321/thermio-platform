@@ -36,6 +36,8 @@ export type EquipmentType = z.infer<typeof EquipmentTypeSchema>;
  * 量类型（DATA-MODEL §3.3 quantity_type，开放集）。消费方：FDD 规则库「设备类型 × 量类型」二维标签。
  * R12 增量（M3-monitor §11 R12，验收 v1.3 通过）：同批登记 energy（能量累计量，kWh——
  * KPI 能耗首末差值数据面）+ load_rate（负荷率 %，冷机控制器直读——验收拍板 3 接入项非派生）。
+ * IMPL-19 增量（optimizer.md §6.6-1，DAT-165）：冷热源 advisory 寻优目标/判据量 7 值
+ * （方向与 unit_std 约定见该表；unit_enable 建议 readwrite 以保证 previous_value）。
  * 开放集扩充 = 发版动作（platform §6.1）：DATA-MODEL §3.3 示例同步归 platform owner。
  */
 export const QUANTITY_TYPES = [
@@ -44,6 +46,13 @@ export const QUANTITY_TYPES = [
   'run_status',
   'energy',
   'load_rate',
+  'chw_supply_temp_setpoint',
+  'chw_return_temp',
+  'chw_flow_rate',
+  'unit_enable',
+  'cooling_water_supply_temp',
+  'cw_supply_temp_setpoint',
+  'tower_fan_power',
 ] as const;
 export const QuantityTypeSchema = z.enum(QUANTITY_TYPES);
 export type QuantityType = z.infer<typeof QuantityTypeSchema>;
@@ -314,5 +323,12 @@ export const QUANTITY_KINDS = {
   run_status: 'enum',
   energy: 'numeric', // R12 增量（M3-monitor §11）：能量累计量 kWh，数值量
   load_rate: 'numeric', // R12 增量：负荷率 %，数值量（P2-3 写点判据同适用）
+  chw_supply_temp_setpoint: 'numeric', // IMPL-19 增量：R1 目标（P2-3 写点数值量）
+  chw_return_temp: 'numeric', // R1/R2 判据 ΔT
+  chw_flow_rate: 'numeric', // 冷负荷实测（可缺，缺则 power proxy）
+  unit_enable: 'numeric', // R2/R3 目标（0/1 数值命令；run_status 的枚态语义不适用于命令点）
+  cooling_water_supply_temp: 'numeric', // R4 逼近温度
+  cw_supply_temp_setpoint: 'numeric', // R4 目标
+  tower_fan_power: 'numeric', // R4 风机余量判据与惩罚项
 } as const satisfies Record<QuantityType, 'numeric' | 'enum'>;
 export type QuantityKind = (typeof QUANTITY_KINDS)[QuantityType];

@@ -55,8 +55,11 @@ export function buildAggregateQuery(
   window: IntervalWindow,
 ): { text: string; values: unknown[] } {
   const table = TELEMETRY_SOURCE_TABLES[interval];
+  // 计数列显式 ::int：cagg 里 count(*) 为 bigint，node-pg 将 bigint 序列化为
+  // string，违约 shared-types TelemetryAggregateSampleSchema 的 z.number().int()
+  // （DAT-117 发现，5min/1h 全体消费方被 zod 拒绝）。桶计数上界远小于 2^31，强转安全。
   return {
-    text: `SELECT bucket, avg, min, max, last, stddev, sample_count, bad_count, quality_mask
+    text: `SELECT bucket, avg, min, max, last, stddev, sample_count::int AS sample_count, bad_count::int AS bad_count, quality_mask
 FROM ${table}
 WHERE point_id = $1 AND bucket >= $2 AND bucket < $3 AND ($4::timestamptz IS NULL OR bucket > $4)
 ORDER BY bucket ASC

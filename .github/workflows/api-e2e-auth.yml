@@ -82,7 +82,9 @@ jobs:
         env:
           PG_E2E_ADMIN_URL: postgres://postgres:postgres@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable
           PG_E2E_API_URL: postgres://thermio_api:${{ env.THERMIO_API_PW }}@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable
-
+          # e2e 门控 E2E_READY 要求三 DSN 齐备（test/e2e-env.ts）——此前缺 AUTH_URL
+          # 导致 97 个 PG 门控用例在 CI 全部 skip（测试报告非阻塞 1，IMPL-10 起缺口）
+          PG_E2E_AUTH_URL: postgres://thermio_auth:${{ env.THERMIO_AUTH_PW }}@127.0.0.1:${{ env.PG_PORT }}/thermio?sslmode=disable
           AUTH_JWT_SECRET: ${{ env.THERMIO_JWT_SECRET }}
         run: pnpm exec turbo run test --filter=@thermio/api
 

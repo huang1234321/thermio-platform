@@ -690,7 +690,8 @@ skipped('告警引擎与中心 e2e（M4-alarm.md §12）', () => {
     expect(nonexistent.status).toBe(404);
     expect(crossTenant.status).toBe(404);
     expect(crossTenant.body.error.reason_code).toBe('alarm.not_found');
-    expect(nonexistent.body.error.reason_code).toBe(nonexistent.body.error.reason_code);
+    // SEC-AZ-03 同码同文案：不存在 vs 越租户的信封逐字段一致（不泄露存在性）
+    expect(nonexistent.body.error.reason_code).toBe(crossTenant.body.error.reason_code);
     expect(nonexistent.body.error.message).toBe(crossTenant.body.error.message);
   });
 

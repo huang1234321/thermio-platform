@@ -83,7 +83,15 @@ const DURATION_PRESETS = [
   { value: 24 * 3600, label: '24 小时' },
 ];
 
-/** 抑制弹窗：期限 presets + 自定义分钟数；duration+reason 均必填（值域 300..86400）。 */
+/** 自定义期限哨兵值（radio value；提交时换算 custom_minutes×60）。 */
+const DURATION_CUSTOM = 'custom';
+
+/**
+ * 抑制弹窗：期限 presets + 自定义分钟数；duration+reason 均必填（值域 300..86400）。
+ * duration_s 必须是**注册字段**（Form.Item name 包 Radio.Group、preset 秒数直接作
+ * radio value）——validateFields 只返回注册字段，未注册时提交体恒缺 duration_s
+ * （测试报告阻塞 1）；preset 键值各不相同，选中态随 preset 区分。
+ */
 export function SuppressModal({
   alarm,
   onClose,
@@ -93,9 +101,14 @@ export function SuppressModal({
   onClose: () => void;
   onDone: () => void;
 }): React.ReactNode {
-  const [form] = Form.useForm<{ duration_s: number; reason: string; custom_minutes?: number }>();
+  const [form] = Form.useForm<{
+    duration_s: number | typeof DURATION_CUSTOM;
+    reason: string;
+    custom_minutes?: number;
+  }>();
   const [submitting, setSubmitting] = useState(false);
-  const [customMode, setCustomMode] = useState(false);
+  const durationValue = Form.useWatch('duration_s', form);
+  const customMode = durationValue === DURATION_CUSTOM;
 
   return (
     <Modal
@@ -107,7 +120,10 @@ export function SuppressModal({
         if (alarm === null) return;
         void (async () => {
           const values = await form.validateFields();
-          const durationS = customMode ? (values.custom_minutes ?? 0) * 60 : values.duration_s;
+          const durationS =
+            values.duration_s === DURATION_CUSTOM
+              ? (values.custom_minutes ?? 0) * 60
+              : values.duration_s;
           setSubmitting(true);
           try {
             const result = await apiFetch(
@@ -135,25 +151,18 @@ export function SuppressModal({
       }}
     >
       <Form form={form} layout="vertical" initialValues={{ duration_s: 3600 }}>
-        <Form.Item label="抑制期限" required>
-          <Radio.Group
-            value={customMode ? 'custom' : 'preset'}
-            onChange={(event) => {
-              setCustomMode(event.target.value === 'custom');
-            }}
-          >
+        <Form.Item
+          name="duration_s"
+          label="抑制期限"
+          rules={[{ required: true, message: '请选择抑制期限' }]}
+        >
+          <Radio.Group optionType="button" buttonStyle="solid">
             {DURATION_PRESETS.map((preset) => (
-              <Radio.Button
-                key={preset.label}
-                value="preset"
-                onClick={() => {
-                  form.setFieldValue('duration_s', preset.value);
-                }}
-              >
+              <Radio.Button key={preset.label} value={preset.value}>
                 {preset.label}
               </Radio.Button>
             ))}
-            <Radio.Button value="custom">自定义</Radio.Button>
+            <Radio.Button value={DURATION_CUSTOM}>自定义</Radio.Button>
           </Radio.Group>
         </Form.Item>
         {customMode && (

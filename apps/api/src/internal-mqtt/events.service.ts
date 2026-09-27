@@ -5,7 +5,7 @@
  *   （认证已拦）——WARN + 忽略，不报错（webhook 不因此重投）；
  * 2 落库：单调卫语句 UPDATE（GatewayStatusService.transition），乱序/重复天然幂等；
  * 3 离线告警联动：reason ∈ keepalive_timeout|discarded|takeover 才触发离线信号
- *   （v1 WARN + 指标留痕，IMPL-13 接通 alarm_rule/alarm_event）；closed/kicked 不触发；
+ *   （IMPL-13 已接通告警引擎——M4-alarm.md §5.1 通道②；closed/kicked 不触发）；
  * 4 在线事件无从属动作（ADR-009 边缘层职责，云端只审计）。
  */
 import { Inject, Injectable } from '@nestjs/common';
@@ -49,6 +49,7 @@ export class MqttEventsService {
     const status = event.event === 'client.connected' ? ('online' as const) : ('offline' as const);
     const applied = await this.gatewayStatus.transition(
       event.clientid,
+      { id: gateway.id, name: gateway.name },
       gateway.tenantId,
       status,
       event.ts,

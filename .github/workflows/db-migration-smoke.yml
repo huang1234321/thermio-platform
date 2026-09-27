@@ -55,18 +55,22 @@ jobs:
         run: go install github.com/pressly/goose/v3/cmd/goose@${GOOSE_VERSION}
 
       # 迁移执行角色 thermio_owner（NOLOGIN）：连接参数 SET ROLE（ddl.md §1/§5.1）
-      - name: goose up（27 表建立，0001–0005）
+      # 表数期望值按迁移链动态计数（Σ CREATE TABLE，DAT-116 起替代硬编码——每张 DDL 卡不再改此钉值）
+      - name: goose up（全链建表，表数 = 迁移文件 CREATE TABLE 计数）
         run: |
+          expected=$(grep -h -E '^CREATE TABLE( IF NOT EXISTS)? ' db/migrations/pg/*.sql | wc -l | tr -d ' ')
+          echo "迁移链 CREATE TABLE 计数：$expected"
           "$(go env GOPATH)/bin/goose" -dir db/migrations/pg postgres \
             "postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
           tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
-          [ "$tables" = "27" ] || { echo "期望 27 表，实际 $tables" >&2; exit 1; }
+          [ "$tables" = "$expected" ] || { echo "期望 $expected 表（迁移链计数），实际 $tables" >&2; exit 1; }
 
       - name: goose down-to 0（回滚干净）再 up（往返一致性）
         run: |
           GOOSE="$(go env GOPATH)/bin/goose"
           DB="postgres://postgres:postgres@127.0.0.1:${PG_PORT}/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner"
+          expected=$(grep -h -E '^CREATE TABLE( IF NOT EXISTS)? ' db/migrations/pg/*.sql | wc -l | tr -d ' ')
           "$GOOSE" -dir db/migrations/pg postgres "$DB" down-to 0
           tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
@@ -74,7 +78,7 @@ jobs:
           "$GOOSE" -dir db/migrations/pg postgres "$DB" up
           tables=$(docker exec "$PG_CONTAINER" psql -U postgres -d thermio -tAc \
             "SELECT count(*) FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' AND table_name <> 'goose_db_version'")
-          [ "$tables" = "27" ] || { echo "重 Up 后期望 27 表，实际 $tables" >&2; exit 1; }
+          [ "$tables" = "$expected" ] || { echo "重 Up 后期望 $expected 表（迁移链计数），实际 $tables" >&2; exit 1; }
 
       - name: RLS 验证（ddl.md §8 用例 2–6）
         run: |

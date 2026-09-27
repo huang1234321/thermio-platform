@@ -5,3 +5,4 @@ export * from './auth.js';
 export * from './error.js';
 export * from './telemetry.js';
 export * from './asset.js';
+export * from './alarm.js';

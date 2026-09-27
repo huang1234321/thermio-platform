@@ -77,7 +77,7 @@ export async function doRefresh(): Promise<LoginResponse> {
 }
 
 export interface ApiCallOptions {
-  readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT';
+  readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   readonly body?: unknown;
   /** 内部重放标记（自动刷新一次，不无限递归）。 */
   readonly retried?: boolean;

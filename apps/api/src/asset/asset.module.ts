@@ -7,6 +7,7 @@
  */
 import { Module } from '@nestjs/common';
 import { TelemetryModule } from '../telemetry/telemetry.module.js';
+import { AlarmModule } from '../alarm/alarm.module.js';
 import { BuildingsController } from './buildings.controller.js';
 import { BuildingsService } from './buildings.service.js';
 import { EquipmentsController } from './equipments.controller.js';
@@ -20,7 +21,7 @@ import { SystemsController } from './systems.controller.js';
 import { SystemsService } from './systems.service.js';
 
 @Module({
-  imports: [TelemetryModule],
+  imports: [TelemetryModule, AlarmModule],
   controllers: [
     BuildingsController,
     SystemsController,

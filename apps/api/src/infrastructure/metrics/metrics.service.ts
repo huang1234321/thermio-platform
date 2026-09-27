@@ -8,7 +8,7 @@
  *   来自 DATA-MODEL §3.5 control_result（CONTROL_RESULTS），不另造清单。
  */
 import { Injectable } from '@nestjs/common';
-import { Counter, Histogram, Registry } from 'prom-client';
+import { Counter, Gauge, Histogram, Registry } from 'prom-client';
 import {
   CONTROL_RESULTS,
   GATE_CAUSES,
@@ -16,6 +16,13 @@ import {
   type GateCause,
 } from '@thermio/shared-types';
 import { OFFLINE_ALARM_REASONS, type OfflineAlarmReason } from '../../internal-mqtt/contract.js';
+import {
+  ALARM_CATEGORIES,
+  ALARM_CLOSE_REASONS_SYSTEM,
+  ALARM_SEVERITIES,
+  QUALITY_EVENTS,
+  type AlarmSeverity,
+} from '@thermio/shared-types';
 
 export const HTTP_DURATION_METRIC = 'svc_http_request_duration_ms';
 export const GATE_REJECTIONS_METRIC = 'thermio_gate_rejections_total';
@@ -24,6 +31,11 @@ export const MQTT_AUTH_METRIC = 'svc_mqtt_auth_total';
 export const MQTT_EVENTS_METRIC = 'svc_mqtt_events_total';
 export const MQTT_OFFLINE_SIGNALS_METRIC = 'svc_mqtt_offline_signals_total';
 export const MQTT_RECONCILE_CYCLES_METRIC = 'svc_mqtt_reconcile_cycles_total';
+export const ALARM_OPENED_METRIC = 'thermio_alarm_opened_total';
+export const ALARM_CLOSED_METRIC = 'thermio_alarm_closed_total';
+export const ALARM_ACTIVE_METRIC = 'thermio_alarm_active';
+export const ALARM_SUPPRESSED_ACTIVE_METRIC = 'thermio_alarm_suppressed_active';
+export const QUALITY_EVENTS_METRIC = 'svc_quality_events_total';
 
 /** 直方图桶（ms）：单楼私有化低流量形态，覆盖 5ms–10s（ADR-017 api HTTP P99 观测窗）。 */
 const HTTP_DURATION_BUCKETS_MS = [5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
@@ -83,6 +95,41 @@ export class MetricsService {
     registers: [this.registry],
   });
 
+  // ── 告警引擎指标（M4-alarm.md §5.7 OBS-MT-04，IMPL-13）──
+  private readonly alarmOpenedTotal = new Counter({
+    name: ALARM_OPENED_METRIC,
+    help: '告警开启计数（M4-alarm.md §5.7）',
+    labelNames: ['category', 'severity'],
+    registers: [this.registry],
+  });
+
+  private readonly alarmClosedTotal = new Counter({
+    name: ALARM_CLOSED_METRIC,
+    help: '告警关闭计数（恢复判据生效情况的运维证据：auto_recovered / root_group_cascade / point_disabled / manual）',
+    labelNames: ['close_reason'],
+    registers: [this.registry],
+  });
+
+  private readonly alarmActive = new Gauge({
+    name: ALARM_ACTIVE_METRIC,
+    help: '活跃告警 gauge（open/acked/suppressed；进程内增量维护，重启后随事件自愈近似）',
+    labelNames: ['severity'],
+    registers: [this.registry],
+  });
+
+  private readonly alarmSuppressedActive = new Gauge({
+    name: ALARM_SUPPRESSED_ACTIVE_METRIC,
+    help: '生效中抑制 gauge（进程内增量维护，重启后随事件自愈近似）',
+    registers: [this.registry],
+  });
+
+  private readonly qualityEventsTotal = new Counter({
+    name: QUALITY_EVENTS_METRIC,
+    help: '质量事件消费计数（ingest.md §8；M4 引擎消费 stale_set/stale_clear，ts_skew/unit_unconverted 为观测面）',
+    labelNames: ['event'],
+    registers: [this.registry],
+  });
+
   constructor() {
     // 预热 label 取值：Counter 的 label 组合在首次 inc 前不进输出——显式 inc(0)
     // 让 /metrics 从第一刻起就暴露五闸门/四结果全维度零值，PromQL 不因「尚未发生」缺序列。
@@ -103,6 +150,21 @@ export class MetricsService {
     }
     for (const outcome of ['completed', 'failed'] as const) {
       this.mqttReconcileCyclesTotal.labels({ outcome }).inc(0);
+    }
+    for (const category of ALARM_CATEGORIES) {
+      for (const severity of ALARM_SEVERITIES) {
+        this.alarmOpenedTotal.labels({ category, severity }).inc(0);
+      }
+    }
+    for (const reason of [...ALARM_CLOSE_REASONS_SYSTEM, 'manual'] as const) {
+      this.alarmClosedTotal.labels({ close_reason: reason }).inc(0);
+    }
+    for (const severity of ALARM_SEVERITIES) {
+      this.alarmActive.labels({ severity }).inc(0);
+    }
+    this.alarmSuppressedActive.inc(0);
+    for (const event of QUALITY_EVENTS) {
+      this.qualityEventsTotal.labels({ event }).inc(0);
     }
   }
 
@@ -134,6 +196,32 @@ export class MetricsService {
 
   recordMqttReconcileCycle(outcome: 'completed' | 'failed'): void {
     this.mqttReconcileCyclesTotal.labels({ outcome }).inc();
+  }
+
+  // ── 告警引擎（M4-alarm.md §5.7）──
+
+  recordAlarmOpened(category: string, severity: string): void {
+    this.alarmOpenedTotal.labels({ category, severity }).inc();
+  }
+
+  /** close_reason label 闭集：系统机器标记 + manual（人工关闭自由文本的统一投影）。 */
+  recordAlarmClosed(closeReason: string): void {
+    const label = (ALARM_CLOSE_REASONS_SYSTEM as readonly string[]).includes(closeReason)
+      ? closeReason
+      : 'manual';
+    this.alarmClosedTotal.labels({ close_reason: label }).inc();
+  }
+
+  changeAlarmActive(severity: AlarmSeverity, delta: number): void {
+    this.alarmActive.labels({ severity }).inc(delta);
+  }
+
+  changeAlarmSuppressed(delta: number): void {
+    this.alarmSuppressedActive.inc(delta);
+  }
+
+  recordQualityEvent(event: (typeof QUALITY_EVENTS)[number]): void {
+    this.qualityEventsTotal.labels({ event }).inc();
   }
 
   /** Prometheus 文本格式暴露（registry.metrics() 为 async）。 */

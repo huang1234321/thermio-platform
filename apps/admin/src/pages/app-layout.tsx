@@ -8,6 +8,7 @@ import { ConfigProvider, Layout, Menu, theme } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, useCapabilities } from '../app/auth-context.js';
 import { visibleMenuEntries } from '../app/menu-model.js';
+import { AlarmBadge } from './alarm/alarm-badge.js';
 
 const THERMIO_PRIMARY = '#0B7285'; // --ti-primary（浅色档）
 
@@ -37,22 +38,25 @@ export function AppLayout(): React.ReactNode {
           }}
         >
           <span style={{ fontSize: 18, fontWeight: 600 }}>thermio 节能管理</span>
-          {me !== null && (
-            <button
-              type="button"
-              onClick={() => {
-                void logout();
-              }}
-              style={{
-                background: 'transparent',
-                color: '#fff',
-                border: 'none',
-                cursor: 'pointer',
-              }}
-            >
-              {me.user.display_name}（{me.role}）· 登出
-            </button>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <AlarmBadge />
+            {me !== null && (
+              <button
+                type="button"
+                onClick={() => {
+                  void logout();
+                }}
+                style={{
+                  background: 'transparent',
+                  color: '#fff',
+                  border: 'none',
+                  cursor: 'pointer',
+                }}
+              >
+                {me.user.display_name}（{me.role}）· 登出
+              </button>
+            )}
+          </div>
         </Layout.Header>
         <Layout>
           <Layout.Sider width={224} theme="light">

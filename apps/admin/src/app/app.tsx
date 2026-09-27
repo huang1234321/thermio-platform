@@ -25,6 +25,9 @@ import { AlarmRulesPage } from '../pages/alarm/alarm-rules-page.js';
 import { AlarmSuppressionsPage } from '../pages/alarm/alarm-suppressions-page.js';
 import { SettingsRolesPage } from '../pages/settings-roles.js';
 import { SettingsUsersPage } from '../pages/settings-users.js';
+import { MonitorOverviewPage } from '../pages/monitor/monitor-overview.js';
+import { EquipmentConditionsPage } from '../pages/monitor/equipment-conditions.js';
+import { EquipmentConditionDetailPage } from '../pages/monitor/equipment-condition-detail.js';
 
 function RequireAuth(): ReactNode {
   const { state } = useAuth();
@@ -55,7 +58,6 @@ function RequireCapability({ capability }: { capability: Capability }): ReactNod
 }
 
 const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
-  { path: '/monitor', title: '监控总览（M3）' },
   { path: '/proposals', title: '控制建议（M5）' },
   { path: '/fdd', title: 'FDD 报告（M6）' },
   { path: '/imports', title: '点表导入（M2）' },
@@ -83,6 +85,15 @@ export function App(): ReactNode {
               <Route path="/alarms/:alarmId" element={<AlarmDetailPage />} />
               <Route path="/alarm-rules" element={<AlarmRulesPage />} />
               <Route path="/alarms/suppressions" element={<AlarmSuppressionsPage />} />
+            </Route>
+            {/* 监控组（M3-monitor §8：页面 1 总览 + 页面 2 检索/详情） */}
+            <Route element={<RequireCapability capability="monitor.read" />}>
+              <Route path="/monitor" element={<MonitorOverviewPage />} />
+              <Route path="/monitor/equipments" element={<EquipmentConditionsPage />} />
+              <Route
+                path="/monitor/equipments/:equipmentId"
+                element={<EquipmentConditionDetailPage />}
+              />
             </Route>
             {/* 资产组（M1-asset §7：6 页路由 + 能力显隐） */}
             <Route element={<RequireCapability capability="assets.read" />}>

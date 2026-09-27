@@ -11,11 +11,10 @@
  *   停止并提示手动刷新；页面隐藏暂停（document.visibilitychange）。
  */
 import { Alert, Card, Skeleton, Space, Spin, Table, Tag, Typography } from 'antd';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import type { ControlAuditRow } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
-import { errorText } from '../asset/asset-shared.js';
 import {
   ActorTag,
   AuditResultTag,
@@ -25,9 +24,7 @@ import {
   gateTitle,
 } from './proposal-shared.js';
 import { parseExecutionView, type ExecutionView } from './execution-view.js';
-
-const POLL_INTERVAL_MS = 3_000;
-const POLL_MAX_ROUNDS = 30;
+import { PROPOSAL_POLL_MAX_ROUNDS, useProposalPolling } from './proposal-hooks.js';
 
 const OUTCOME_LABEL: Record<string, string> = {
   executed: '已执行',
@@ -53,7 +50,6 @@ export function ProposalExecutionPage(): React.ReactNode {
   const [view, setView] = useState<ExecutionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const pollRounds = useRef(0);
 
   const load = useCallback(async (): Promise<ExecutionView> => {
     if (proposalId === undefined) throw new Error('缺 proposalId');
@@ -67,38 +63,20 @@ export function ProposalExecutionPage(): React.ReactNode {
     });
   }, [proposalId]);
 
+  // M5 §7（B2 复用）：3s 轮询、终态停、30 次上限、隐藏暂停（hook 内）
+  const { rounds: pollRounds } = useProposalPolling(
+    load,
+    (data) => data.status === 'approved',
+    (data) => {
+      setView(data);
+      setError(null);
+      setLoading(false);
+    },
+    true,
+  );
   useEffect(() => {
-    let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const round = async (): Promise<void> => {
-      try {
-        const next = await load();
-        if (stopped) return;
-        setView(next);
-        setError(null);
-        const running = next.status === 'approved' || (next.status === 'pending' && false);
-        if (
-          running &&
-          pollRounds.current < POLL_MAX_ROUNDS &&
-          document.visibilityState === 'visible'
-        ) {
-          pollRounds.current += 1;
-          timer = setTimeout(() => void round(), POLL_INTERVAL_MS);
-        }
-      } catch (cause) {
-        if (stopped) return;
-        setError(errorText(cause, '执行详情加载失败'));
-      } finally {
-        if (!stopped) setLoading(false);
-      }
-    };
-    void round();
-    return () => {
-      stopped = true;
-      if (timer !== null) clearTimeout(timer);
-    };
-  }, [load]);
+    setLoading(false);
+  }, []);
 
   if (loading) return <Skeleton active />;
   if (error !== null || view === null) {
@@ -135,7 +113,7 @@ export function ProposalExecutionPage(): React.ReactNode {
       {view.status === 'pending' && (
         <Alert type="info" showIcon message="建议尚未确认（approve 后进入仲裁执行）" />
       )}
-      {pollRounds.current >= POLL_MAX_ROUNDS && isRunning && (
+      {pollRounds.current >= PROPOSAL_POLL_MAX_ROUNDS && isRunning && (
         <Alert type="warning" showIcon message="执行仍在进行，请稍后手动刷新" />
       )}
 

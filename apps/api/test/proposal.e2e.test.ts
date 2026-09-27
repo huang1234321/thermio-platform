@@ -647,9 +647,24 @@ skipped('proposal e2e（IMPL-17 验收要点）', () => {
     expect((invalidStatus.body as { error: { reason_code: string } }).error.reason_code).toBe(
       'common.validation_failed',
     );
+    // B1：details.field 映射（首 issue path 段）
+    expect(
+      (invalidStatus.body as { error: { details: { field: string } } }).error.details.field,
+    ).toBe('status');
 
     const unknownParam = await authed('get', '/api/v1/proposals?keyword=x', adminToken);
     expect(unknownParam.status).toBe(422); // 白名单外（API-DSN-04）
+    // B1：白名单外参数 → details.field=<param>（M5 §3.1）
+    expect(
+      (unknownParam.body as { error: { details: { field: string } } }).error.details.field,
+    ).toBe('keyword');
+
+    // control-audit 白名单同形态
+    const auditUnknown = await authed('get', '/api/v1/control-audit?foo=1', adminToken);
+    expect(auditUnknown.status).toBe(422);
+    expect(
+      (auditUnknown.body as { error: { details: { field: string } } }).error.details.field,
+    ).toBe('foo');
   });
 
   it('shouldHideCrossTenantProposal_404SameCode', async () => {

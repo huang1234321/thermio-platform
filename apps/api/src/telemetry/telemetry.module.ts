@@ -122,5 +122,7 @@ class TelemetryGateway implements OnModuleInit, OnApplicationShutdown {
     TelemetryService,
     TelemetryGateway,
   ],
+  /** TELEMETRY_STORE 供资产域消费（IMPL-11 设备点位列表 latest 快照，M1-asset §3.4）。 */
+  exports: [TELEMETRY_STORE],
 })
 export class TelemetryModule {}

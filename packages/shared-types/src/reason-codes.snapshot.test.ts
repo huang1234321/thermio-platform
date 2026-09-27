@@ -19,11 +19,23 @@ describe('reason_code registry snapshot', () => {
         "alarm.rule_not_found": {
           "http": 404,
         },
+        "asset.building_type_unknown": {
+          "http": 422,
+        },
         "asset.duplicate_raw_name": {
+          "http": 409,
+        },
+        "asset.equipment_type_unknown": {
+          "http": 422,
+        },
+        "asset.local_id_duplicate": {
           "http": 409,
         },
         "asset.not_found": {
           "http": 404,
+        },
+        "asset.system_type_unknown": {
+          "http": 422,
         },
         "auth.forbidden": {
           "http": 403,
@@ -43,6 +55,9 @@ describe('reason_code registry snapshot', () => {
         "auth.unauthenticated": {
           "http": 401,
         },
+        "common.conflict": {
+          "http": 409,
+        },
         "common.internal_error": {
           "http": 500,
         },
@@ -55,17 +70,35 @@ describe('reason_code registry snapshot', () => {
         "common.validation_failed": {
           "http": 422,
         },
+        "credential.limit_exceeded": {
+          "http": 409,
+        },
+        "credential.not_found": {
+          "http": 404,
+        },
+        "gateway.not_found": {
+          "http": 404,
+        },
+        "gateway.serial_duplicate": {
+          "http": 409,
+        },
         "mv.baseline_not_active": {
           "http": 409,
         },
         "mv.period_invalid": {
           "http": 422,
         },
+        "point.field_not_allowed": {
+          "http": 400,
+        },
         "point.no_data": {
           "http": 404,
         },
         "point.not_controllable": {
           "http": 409,
+        },
+        "point.quantity_type_unknown": {
+          "http": 422,
         },
         "point.write_not_numeric": {
           "http": 422,

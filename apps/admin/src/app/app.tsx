@@ -18,6 +18,8 @@ import { SystemDetailPage } from '../pages/asset/system-detail.js';
 import { EquipmentDetailPage } from '../pages/asset/equipment-detail.js';
 import { PointDetailPage } from '../pages/asset/point-detail.js';
 import { GatewayDetailPage } from '../pages/asset/gateway-detail.js';
+import { ImportsListPage } from '../pages/import/imports-list.js';
+import { ImportWizardPage, ImportWizardResumePage } from '../pages/import/import-wizard.js';
 import { SettingsMePage } from '../pages/settings-me.js';
 import { SettingsRolesPage } from '../pages/settings-roles.js';
 import { SettingsUsersPage } from '../pages/settings-users.js';
@@ -55,7 +57,6 @@ const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
   { path: '/alarms', title: '告警中心（M4）' },
   { path: '/proposals', title: '控制建议（M5）' },
   { path: '/fdd', title: 'FDD 报告（M6）' },
-  { path: '/imports', title: '点表导入（M2）' },
   { path: '/control/points', title: '控制安全（M8）' },
 ];
 
@@ -82,6 +83,14 @@ export function App(): ReactNode {
               <Route path="/assets/equipments/:equipmentId" element={<EquipmentDetailPage />} />
               <Route path="/assets/points/:pointId" element={<PointDetailPage />} />
               <Route path="/assets/gateways/:gatewayId" element={<GatewayDetailPage />} />
+            </Route>
+            {/* 导入组（M2-import §10：历史 + 五步向导 + 作业详情/续入合一，baseline §1.2 R9） */}
+            <Route element={<RequireCapability capability="imports.read" />}>
+              <Route path="/imports" element={<ImportsListPage />} />
+              <Route element={<RequireCapability capability="imports.write" />}>
+                <Route path="/imports/new" element={<ImportWizardPage />} />
+              </Route>
+              <Route path="/imports/:jobId" element={<ImportWizardResumePage />} />
             </Route>
             <Route path="/settings/me" element={<SettingsMePage />} />
             <Route path="/settings/roles" element={<SettingsRolesPage />} />

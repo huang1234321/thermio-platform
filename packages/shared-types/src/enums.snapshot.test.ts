@@ -14,6 +14,10 @@ import {
   DEPLOYMENT_MODES,
   DIRECTIONS,
   EQUIPMENT_TYPES,
+  IMPORT_FAILURE_CODES,
+  IMPORT_ISSUE_CODES,
+  IMPORT_JOB_STATUSES,
+  IMPORT_ROW_MAP_STATUSES,
   MV_BASELINE_STATUSES,
   MV_METHODS,
   PROPOSAL_STATUSES,
@@ -24,6 +28,10 @@ import {
   AlarmEventStatusSchema,
   BuildingTypeSchema,
   ControlModeSchema,
+  ImportFailureCodeSchema,
+  ImportIssueCodeSchema,
+  ImportJobStatusSchema,
+  ImportRowMapStatusSchema,
   ProposalStatusSchema,
   SourceTypeSchema,
   type AlarmEventStatus,
@@ -36,6 +44,10 @@ import {
   type DeploymentMode,
   type Direction,
   type EquipmentType,
+  type ImportFailureCode,
+  type ImportIssueCode,
+  type ImportJobStatus,
+  type ImportRowMapStatus,
   type MvBaselineStatus,
   type MvMethod,
   type ProposalStatus,
@@ -66,6 +78,11 @@ const ENUM_REGISTRY = {
   ALARM_SCOPES,
   ALARM_EVENT_STATUSES,
   BUILDING_TYPES,
+  // 导入域（DAT-104 随消费方 IMPL-15/DAT-118 落地；platform.md §6.3 v1.1 × ddl.md §9.1）
+  IMPORT_JOB_STATUSES,
+  IMPORT_ROW_MAP_STATUSES,
+  IMPORT_ISSUE_CODES,
+  IMPORT_FAILURE_CODES,
 } as const;
 
 describe('enum registry snapshot', () => {
@@ -132,6 +149,40 @@ describe('enum registry snapshot', () => {
           "sensor",
           "energy_meter",
         ],
+        "IMPORT_FAILURE_CODES": [
+          "template_mismatch",
+          "row_limit_exceeded",
+          "sheet_corrupt",
+          "gateway_ack_timeout",
+          "gateway_ack_partial",
+          "gateway_ack_failed",
+        ],
+        "IMPORT_ISSUE_CODES": [
+          "row_unmapped",
+          "raw_name_duplicate_internal",
+          "raw_name_conflict_existing",
+          "quantity_type_unknown",
+          "write_point_not_numeric",
+          "unit_unsupported",
+          "unit_std_missing",
+          "equipment_unassigned",
+          "write_point_clamp_pending",
+          "gateway_offline",
+          "offline_action_ref_unresolved",
+        ],
+        "IMPORT_JOB_STATUSES": [
+          "parsed",
+          "mapping",
+          "validated",
+          "applied",
+          "checked",
+          "failed",
+        ],
+        "IMPORT_ROW_MAP_STATUSES": [
+          "unmapped",
+          "auto",
+          "manual",
+        ],
         "MV_BASELINE_STATUSES": [
           "draft",
           "active",
@@ -195,6 +246,10 @@ describe('enum schema/type single source (platform.md §5.3)', () => {
     expectTypeOf<AlarmScope>().toEqualTypeOf<(typeof ALARM_SCOPES)[number]>();
     expectTypeOf<AlarmEventStatus>().toEqualTypeOf<(typeof ALARM_EVENT_STATUSES)[number]>();
     expectTypeOf<BuildingType>().toEqualTypeOf<(typeof BUILDING_TYPES)[number]>();
+    expectTypeOf<ImportJobStatus>().toEqualTypeOf<(typeof IMPORT_JOB_STATUSES)[number]>();
+    expectTypeOf<ImportRowMapStatus>().toEqualTypeOf<(typeof IMPORT_ROW_MAP_STATUSES)[number]>();
+    expectTypeOf<ImportIssueCode>().toEqualTypeOf<(typeof IMPORT_ISSUE_CODES)[number]>();
+    expectTypeOf<ImportFailureCode>().toEqualTypeOf<(typeof IMPORT_FAILURE_CODES)[number]>();
   });
 });
 
@@ -206,10 +261,17 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmEventStatusSchema.safeParse('reopened').success).toBe(false);
     expect(SourceTypeSchema.safeParse('modbus').success).toBe(false);
     expect(BuildingTypeSchema.safeParse('school').success).toBe(false);
+    // 导入域（DAT-104：随 IMPL-15 落地的两组 + 两个封闭集）
+    expect(ImportJobStatusSchema.safeParse('importing').success).toBe(false);
+    expect(ImportRowMapStatusSchema.safeParse('skipped').success).toBe(false);
+    expect(ImportIssueCodeSchema.safeParse('row_skipped').success).toBe(false);
+    expect(ImportFailureCodeSchema.safeParse('header_missing').success).toBe(false);
   });
 
   it('shouldParseKnownValue_whenValueIsInTheRegistry', () => {
     expect(ControlModeSchema.safeParse('advisory').success).toBe(true);
     expect(ProposalStatusSchema.safeParse('executed').success).toBe(true);
+    expect(ImportJobStatusSchema.safeParse('validated').success).toBe(true);
+    expect(ImportRowMapStatusSchema.safeParse('manual').success).toBe(true);
   });
 });

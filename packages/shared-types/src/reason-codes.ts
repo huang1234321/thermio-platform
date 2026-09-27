@@ -65,6 +65,18 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * - point.field_not_allowed（语义 PATCH 白名单外字段，400——schema 合法但违反端点策略）；
  * - 接入域三码 gateway.not_found / gateway.serial_duplicate / credential.not_found /
  *   credential.limit_exceeded（R6：platform 种子未覆盖接入域）。
+ *
+ * 五批注册（IMPL-15 / DAT-118，点表导入向导，modules M2-import.md §1.2 增量 8 码逐字；
+ * `import.template_mismatch` **不落 HTTP 码**——表头不符为异步解析期发现，由作业
+ * failure.code='template_mismatch' 承载（M2-import §1.3/R1），故不入本表）：
+ * - import.not_found（404，details.entity ∈ {import_job, import_row}）；
+ * - import.state_invalid（409，状态机守卫，details: {current_status, allowed}）；
+ * - import.file_invalid（422，同步文件级校验：非 xlsx 容器/超 5 MB/空文件/容器损坏）；
+ * - import.building_mismatch（422，gateway.building_id ≠ 请求 building_id）；
+ * - import.gateway_offline（409，apply 同步预检：目标网关 offline）；
+ * - import.apply_conflict（409，apply 同步预检主面 + 登记事务内竞态兜底，details.conflicts）；
+ * - import.unit_conversion_unsupported（422，PATCH 即时校验 + apply 复核双面）；
+ * - import.selfcheck_not_ready（404，details.reason ∈ {never_run, in_progress}）。
  */
 export const REASON_CODES = [
   'common.validation_failed',
@@ -104,6 +116,14 @@ export const REASON_CODES = [
   'point.no_data',
   'telemetry.range_invalid',
   'telemetry.store_unavailable',
+  'import.not_found',
+  'import.state_invalid',
+  'import.file_invalid',
+  'import.building_mismatch',
+  'import.gateway_offline',
+  'import.apply_conflict',
+  'import.unit_conversion_unsupported',
+  'import.selfcheck_not_ready',
 ] as const;
 
 export const ReasonCodeSchema = z.enum(REASON_CODES);
@@ -339,6 +359,52 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 503,
     description:
       '遥测查询所需存储不可用或未配置（TSDB 只读连接 / PG 点位档案；dev 无栈时显式降级口径，ADR-005 read replica 配置位）',
+  },
+  'import.not_found': {
+    domain: 'import',
+    http: 404,
+    description:
+      '导入作业/行不存在或越权（details.entity ∈ {import_job, import_row}；SEC-AZ-03 不区分不存在与越界）',
+  },
+  'import.state_invalid': {
+    domain: 'import',
+    http: 409,
+    description:
+      '作业状态机守卫拒绝（details: {current_status, allowed}；守卫矩阵见 M2-import §4.2）',
+  },
+  'import.file_invalid': {
+    domain: 'import',
+    http: 422,
+    description:
+      '上传文件级校验失败：非 xlsx 容器、超 5 MB、空文件、容器损坏（details.reason ∈ {size_exceeded, not_xlsx, empty, corrupt}；同步拒绝、作业不入库）',
+  },
+  'import.building_mismatch': {
+    domain: 'import',
+    http: 422,
+    description: '网关归属楼宇与请求楼宇不一致（ddl §9.1 应用层一致性校验的端点化）',
+  },
+  'import.gateway_offline': {
+    domain: 'import',
+    http: 409,
+    description: 'apply 同步预检：目标网关 status=offline（推送必失败的前置拦截）',
+  },
+  'import.apply_conflict': {
+    domain: 'import',
+    http: 409,
+    description:
+      'apply 与已注册点位 raw_name 冲突（details.conflicts 行清单；同步预检主面 + 登记事务内竞态兜底双面）',
+  },
+  'import.unit_conversion_unsupported': {
+    domain: 'import',
+    http: 422,
+    description:
+      '单位对无转换规则（PATCH rows 即时校验 + apply 复核双面；行级 dry-run 形态为 issue unit_unsupported）',
+  },
+  'import.selfcheck_not_ready': {
+    domain: 'import',
+    http: 404,
+    description:
+      '自检报告未生成（details.reason ∈ {never_run, in_progress}；作业不存在走 import.not_found）',
   },
 };
 

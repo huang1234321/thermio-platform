@@ -36,5 +36,6 @@ import { SystemsService } from './systems.service.js';
     GatewaysService,
     IdempotencyStore,
   ],
+  exports: [IdempotencyStore], // IMPL-15 复用（apply 幂等键，M2-import §8.1）
 })
 export class AssetModule {}

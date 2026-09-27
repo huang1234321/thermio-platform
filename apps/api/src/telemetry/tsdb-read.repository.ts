@@ -53,6 +53,8 @@ export interface TelemetryStore {
     interval: '5min' | '1h',
     window: IntervalWindow,
   ): Promise<TelemetryAggregateSample[]>;
+  /** 窗口内存在性批查（IMPL-15 自检命中判定）：[from, to] 内有 ≥1 行的 point_id 集。 */
+  presentInWindow(pointIds: readonly number[], from: Date, to: Date): Promise<Set<number>>;
 }
 
 export class TsdbReadRepository implements TelemetryStore {
@@ -92,6 +94,16 @@ export class TsdbReadRepository implements TelemetryStore {
     const query = buildAggregateQuery(interval, window);
     const rows = await this.run<AggregateRow>(query.text, query.values);
     return rows.map(toAggregateSample);
+  }
+
+  async presentInWindow(pointIds: readonly number[], from: Date, to: Date): Promise<Set<number>> {
+    if (pointIds.length === 0) return new Set();
+    const rows = await this.run<{ point_id: string | number }>(
+      `SELECT DISTINCT point_id FROM telemetry
+       WHERE point_id = ANY($1::bigint[]) AND ts >= $2 AND ts <= $3`,
+      [pointIds, from.toISOString(), to.toISOString()],
+    );
+    return new Set(rows.map((row) => Number(row.point_id)));
   }
 
   /** 连接类错误 → 不可用载体；其余原样上抛（程序缺陷，500 兜底）。 */
@@ -144,5 +156,6 @@ export function disabledTelemetryStore(reason: string): TelemetryStore {
     latestBatch: unavailable,
     listRaw: unavailable,
     listAggregate: unavailable,
+    presentInWindow: unavailable,
   };
 }

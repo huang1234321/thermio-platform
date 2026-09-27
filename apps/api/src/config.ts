@@ -82,6 +82,13 @@ const AppConfigSchema = z.object({
   // 连接串含口令只来自环境变量（SEC-KEY-01）；空值 = 数据库未接线（骨架期健康起服）。
   PG_API_URL: z.string().default(''),
   PG_AUTH_URL: z.string().default(''),
+  // ── 导入域 MQTT 下行通道（IMPL-15 / M2-import §8.4/§9.2；emqx.md §4 R6）──
+  // svc-api 内部账号：down/config(retained)/down/read 发布 + config/ack 共享订阅。
+  // 未设置 = 通道停用（apply 推送段降级跳过，登记保留——dev 无栈形态）。
+  MQTT_BROKER_URL: z.string().default(''),
+  MQTT_USERNAME: z.string().default('svc-api'),
+  MQTT_PASSWORD: z.string().default(''),
+  MQTT_CLIENT_ID: z.string().min(1).default('thermio-api-import'),
   // ── 认证会话（SEC-AZ-04：短时效 + 服务端可撤销）──
   AUTH_JWT_SECRET: z.string().min(32).default(''),
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),

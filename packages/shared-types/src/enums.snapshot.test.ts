@@ -19,6 +19,8 @@ import {
   DEPLOYMENT_MODES,
   DIRECTIONS,
   EQUIPMENT_TYPES,
+  FDD_FINDING_STATUSES,
+  FDD_REPORT_PERIOD_TYPES,
   MV_BASELINE_STATUSES,
   MV_METHODS,
   PROPOSAL_STATUSES,
@@ -33,6 +35,8 @@ import {
   AlarmScopeSchema,
   AlarmSeveritySchema,
   BuildingTypeSchema,
+  FddFindingStatusSchema,
+  FddReportPeriodTypeSchema,
   ControlModeSchema,
   ProposalStatusSchema,
   QualityEventSchema,
@@ -52,6 +56,8 @@ import {
   type DeploymentMode,
   type Direction,
   type EquipmentType,
+  type FddFindingStatus,
+  type FddReportPeriodType,
   type MvBaselineStatus,
   type MvMethod,
   type ProposalStatus,
@@ -254,6 +260,8 @@ describe('enum schema/type single source (platform.md §5.3)', () => {
     expectTypeOf<ControlActorType>().toEqualTypeOf<(typeof CONTROL_ACTOR_TYPES)[number]>();
     expectTypeOf<ControlResult>().toEqualTypeOf<(typeof CONTROL_RESULTS)[number]>();
     expectTypeOf<ConfigAuditField>().toEqualTypeOf<(typeof CONFIG_AUDIT_FIELDS)[number]>();
+    expectTypeOf<FddFindingStatus>().toEqualTypeOf<(typeof FDD_FINDING_STATUSES)[number]>();
+    expectTypeOf<FddReportPeriodType>().toEqualTypeOf<(typeof FDD_REPORT_PERIOD_TYPES)[number]>();
     expectTypeOf<MvBaselineStatus>().toEqualTypeOf<(typeof MV_BASELINE_STATUSES)[number]>();
     expectTypeOf<MvMethod>().toEqualTypeOf<(typeof MV_METHODS)[number]>();
     expectTypeOf<AlarmScope>().toEqualTypeOf<(typeof ALARM_SCOPES)[number]>();
@@ -285,6 +293,9 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmRuleTypeSchema.safeParse('value_threshold').success).toBe(false);
     expect(AlarmCategorySchema.safeParse('infra_tsdb_down').success).toBe(false);
     expect(QualityEventSchema.safeParse('stale').success).toBe(false);
+    // FDD 域（IMPL-17 并入项，DAT-104 管道同步覆盖）
+    expect(FddFindingStatusSchema.safeParse('closed').success).toBe(false);
+    expect(FddReportPeriodTypeSchema.safeParse('month').success).toBe(false);
   });
 
   it('shouldParseKnownValue_whenValueIsInTheRegistry', () => {
@@ -294,5 +305,7 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmRuleTypeSchema.safeParse('gateway_offline').success).toBe(true);
     expect(AlarmCategorySchema.safeParse('control_drift').success).toBe(true);
     expect(AlarmScopeSchema.safeParse('gateway').success).toBe(true);
+    expect(FddFindingStatusSchema.safeParse('ignored').success).toBe(true);
+    expect(FddReportPeriodTypeSchema.safeParse('week').success).toBe(true);
   });
 });

@@ -129,7 +129,7 @@ for t in gateway device_credential app_user tenant equipment building point hvac
   expect_readable "auth 可 SELECT $t（internal_read 枚举集）" \
     "SET ROLE thermio_auth; SELECT count(*) FROM $t;"
 done
-for t in proposal fdd_finding fdd_report alarm_event control_audit auth_session; do
+for t in proposal fdd_finding fdd_report alarm_event control_audit auth_session password_reset_token; do
   expect_error "auth 读 $t 拒绝（旁路面未失控）" "permission denied" \
     "SET ROLE thermio_auth; SELECT count(*) FROM $t;"
 done

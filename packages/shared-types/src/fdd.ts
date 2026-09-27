@@ -12,19 +12,11 @@
  * 取值零自造：severity 五级 = ALARM_SEVERITIES；状态/期型 = ddl.md §9.2 CHECK。
  */
 import { z } from 'zod';
-import { ALARM_SEVERITIES } from './enums.js';
+import { ALARM_SEVERITIES, FddFindingStatusSchema, FddReportPeriodTypeSchema } from './enums.js';
 
 const LIMIT = z.coerce.number().int().min(1).max(200).default(50);
 const CURSOR = z.string().min(1).max(512);
 const RFC3339 = z.iso.datetime({ offset: true });
-
-/** FDD 发现状态（ddl.md §9.2 CHECK 封闭集）。 */
-export const FDD_FINDING_STATUSES = ['open', 'resolved', 'ignored'] as const;
-export type FddFindingStatus = (typeof FDD_FINDING_STATUSES)[number];
-
-/** 报告期型（ddl.md §9.2 CHECK）。 */
-export const FDD_REPORT_PERIOD_TYPES = ['day', 'week'] as const;
-export type FddReportPeriodType = (typeof FDD_REPORT_PERIOD_TYPES)[number];
 
 /** 证据固定骨架（algo.md §7.5：点位清单 + 窗口 + 规则自定义量化）。 */
 export const FddEvidenceSchema = z.object({
@@ -46,7 +38,7 @@ export const FddFindingListItemSchema = z.object({
   }),
   rule_key: z.string(),
   severity: z.enum(ALARM_SEVERITIES),
-  status: z.enum(FDD_FINDING_STATUSES),
+  status: FddFindingStatusSchema,
   title: z.string(),
   suggested_action: z.string().nullable(),
   algo_version: z.string(),
@@ -153,7 +145,7 @@ export type FddReportSummary = z.infer<typeof FddReportSummarySchema>;
 export const FddReportSubmissionSchema = z
   .object({
     building_id: z.uuid(),
-    period_type: z.enum(FDD_REPORT_PERIOD_TYPES),
+    period_type: FddReportPeriodTypeSchema,
     period: FddPeriodSchema,
     summary: FddReportSummarySchema,
     algo_version: z.string().min(1),

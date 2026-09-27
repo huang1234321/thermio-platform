@@ -22,7 +22,7 @@ describe('reason_code registry', () => {
     }
   });
 
-  it('shouldRegisterExactlyFortyNineCodes_eighteenSeedsPlusFiveBatches', () => {
+  it('shouldRegisterExactlyFiftySevenCodes_eighteenSeedsPlusSixBatches', () => {
     // §5.2 种子 18 码（common.not_found 随 DAT-119 / DAT-96 收尾增补）+ 五批增量
     // （数组注释留痕，均走 PR 治理）：IMPL-12 三遥测码（DAT-115）
     // + IMPL-7 auth.service_unauthorized（DAT-110，§11-2）
@@ -30,9 +30,12 @@ describe('reason_code registry', () => {
     // refresh_revoked、user.* 四码、role.unknown）
     // + IMPL-11 十一码（DAT-114，M1-asset §1.2 落码值：common.conflict、
     // asset. 枚举/重复四码、point. 两码、gateway. 两码、credential. 两码）
+    // + IMPL-13 八码（DAT-116，M4-alarm.md §1.2：alarm.not_found / state_invalid /
+    //   suppress_duration_invalid / rule_scope_invalid / rule_params_invalid /
+    //   rule_type_unknown / severity_unknown / rule_in_use）
     // + IMPL-15 八码（DAT-118，M2-import §1.2 增量：import.* 全域八码——
     // template_mismatch 不落 HTTP 码，由作业 failure.code 承载故不在表）。
-    expect(REASON_CODES).toHaveLength(49);
+    expect(REASON_CODES).toHaveLength(57);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

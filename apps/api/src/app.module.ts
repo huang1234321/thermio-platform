@@ -29,6 +29,7 @@ import {
 import { TelemetryModule } from './telemetry/telemetry.module.js';
 import { UsersModule } from './users/users.module.js';
 import { AssetModule } from './asset/asset.module.js';
+import { AlarmModule } from './alarm/alarm.module.js';
 import { ImportModule } from './import/import.module.js';
 
 /** 全局过滤器/拦截器（执行序：中间件 → 拦截器 → 管道 → 控制器）。 */
@@ -48,6 +49,7 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
     AuthModule,
     UsersModule,
     AssetModule,
+    AlarmModule,
     ImportModule,
   ],
   controllers: [HealthController, MetricsController],

@@ -29,10 +29,16 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
  * assets.write / points.semantics.write / points.status.write / gateways.manage
  * ——IMPL-10（/me 下发）与 IMPL-11（@RequireCapabilities）同源消费本目录。
  * points.physical.write（§3.10，R17 定稿）随 DAT-151 落码注册，本批不含。
+ *
+ * IMPL-13 增量（M7-auth §4.1 定稿键名逐字，M4-alarm.md §1.5）：
+ * alarms.ack（operator+）/ alarms.suppress（admin）/ alarm_rules.write（admin）。
  */
 export const CAPABILITIES = [
   'monitor.read',
   'alarms.read',
+  'alarms.ack',
+  'alarms.suppress',
+  'alarm_rules.write',
   'proposals.read',
   'fdd.read',
   'assets.read',
@@ -82,11 +88,14 @@ const VIEWER_CAPABILITIES: readonly Capability[] = [
  */
 export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = {
   viewer: VIEWER_CAPABILITIES,
-  operator: [...VIEWER_CAPABILITIES, 'imports.write', 'points.semantics.write'],
+  operator: [...VIEWER_CAPABILITIES, 'imports.write', 'points.semantics.write', 'alarms.ack'],
   admin: [
     ...VIEWER_CAPABILITIES,
     'imports.write',
     'points.semantics.write',
+    'alarms.ack',
+    'alarms.suppress',
+    'alarm_rules.write',
     'assets.write',
     'points.status.write',
     'gateways.manage',

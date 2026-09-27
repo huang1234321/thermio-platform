@@ -33,6 +33,7 @@ import { ReasonCodeException } from '../infrastructure/errors/reason-code.except
 import { TELEMETRY_STORE } from '../telemetry/telemetry.tokens.js';
 import { type TelemetryStore } from '../telemetry/tsdb-read.repository.js';
 import { TelemetryStoreUnavailableError } from '../telemetry/telemetry-store.error.js';
+import { AlarmEngineService } from '../alarm/alarm-engine.service.js';
 import {
   POINT_KEYSET_COLUMNS,
   decodeAssetCursor,
@@ -92,6 +93,7 @@ export class PointsService {
     @Inject(TENANT_DB) private readonly tenantDb: TenantDb | null,
     @Inject(LOGGER) rootLogger: Logger,
     @Inject(TELEMETRY_STORE) private readonly telemetry: TelemetryStore,
+    @Inject(AlarmEngineService) private readonly alarmEngine: AlarmEngineService,
   ) {
     this.logger = rootLogger.child({ component: 'asset-points' });
   }
@@ -316,10 +318,16 @@ export class PointsService {
     reason: string,
   ): Promise<Point> {
     const db = this.requireDb();
-    return db.withTenant(actor.tenant_id, async (tx) => {
+    const result = await db.withTenant(actor.tenant_id, async (tx) => {
       const row = await loadPoint(tx, actor, pointId);
-      return applyStatusChange(tx, this.logger, actor, row, status, reason);
+      return { row, point: await applyStatusChange(tx, this.logger, actor, row, status, reason) };
     });
+    // M1-asset §10-O3 收口（M4-alarm.md §5.3-7）：停用即采集面停，stale 永不清除
+    // ——活跃 point_stale 告警系统关闭（close_reason=point_disabled）
+    if (status === 'disabled' && result.row.status !== 'disabled') {
+      await this.alarmEngine.onPointsDisabled(actor.tenant_id, [pointId]);
+    }
+    return result.point;
   }
 
   /** POST /points/batch-status（207 逐项；整单不回滚）。 */
@@ -328,13 +336,15 @@ export class PointsService {
     body: PointBatchStatus,
   ): Promise<{ items: PointBatchStatusItem[] }> {
     const db = this.requireDb();
-    return db.withTenant(actor.tenant_id, async (tx) => {
+    const { items, disabledIds } = await db.withTenant(actor.tenant_id, async (tx) => {
       const items: PointBatchStatusItem[] = [];
+      const disabledIds: number[] = [];
       for (const pointId of body.ids) {
         try {
           const row = await loadPoint(tx, actor, pointId);
           await applyStatusChange(tx, this.logger, actor, row, body.status, body.reason);
           items.push({ point_id: pointId, ok: true });
+          if (body.status === 'disabled' && row.status !== 'disabled') disabledIds.push(pointId);
         } catch (error) {
           // 逐项失败不中断整单（§3.6：越权/不存在项报 asset.not_found）
           const reasonCode =
@@ -342,8 +352,12 @@ export class PointsService {
           items.push({ point_id: pointId, ok: false, error: { reason_code: reasonCode } });
         }
       }
-      return { items };
+      return { items, disabledIds };
     });
+    if (disabledIds.length > 0) {
+      await this.alarmEngine.onPointsDisabled(actor.tenant_id, disabledIds);
+    }
+    return { items };
   }
 
   /** latest 快照批量装配（TSDB 不可用 → 全 null 降级 + WARN——列表主资源是点位档案）。 */

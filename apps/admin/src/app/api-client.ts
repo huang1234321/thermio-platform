@@ -77,7 +77,7 @@ export async function doRefresh(): Promise<LoginResponse> {
 }
 
 export interface ApiCallOptions {
-  readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT';
+  readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   readonly body?: unknown;
   /** 附加请求头（如 apply 必带的 Idempotency-Key，M2-import §3.8）。 */
   readonly headers?: Record<string, string>;

@@ -21,6 +21,10 @@ import { GatewayDetailPage } from '../pages/asset/gateway-detail.js';
 import { ImportsListPage } from '../pages/import/imports-list.js';
 import { ImportWizardPage, ImportWizardResumePage } from '../pages/import/import-wizard.js';
 import { SettingsMePage } from '../pages/settings-me.js';
+import { AlarmsPage } from '../pages/alarm/alarms-page.js';
+import { AlarmDetailPage } from '../pages/alarm/alarm-detail-page.js';
+import { AlarmRulesPage } from '../pages/alarm/alarm-rules-page.js';
+import { AlarmSuppressionsPage } from '../pages/alarm/alarm-suppressions-page.js';
 import { SettingsRolesPage } from '../pages/settings-roles.js';
 import { SettingsUsersPage } from '../pages/settings-users.js';
 
@@ -54,7 +58,6 @@ function RequireCapability({ capability }: { capability: Capability }): ReactNod
 
 const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
   { path: '/monitor', title: '监控总览（M3）' },
-  { path: '/alarms', title: '告警中心（M4）' },
   { path: '/proposals', title: '控制建议（M5）' },
   { path: '/fdd', title: 'FDD 报告（M6）' },
   { path: '/control/points', title: '控制安全（M8）' },
@@ -75,6 +78,13 @@ export function App(): ReactNode {
                 element={<ModulePlaceholderPage title={route.title} />}
               />
             ))}
+            {/* 告警组（M4-alarm §7：3 页 + 抑制记录入口，能力 alarms.read） */}
+            <Route element={<RequireCapability capability="alarms.read" />}>
+              <Route path="/alarms" element={<AlarmsPage />} />
+              <Route path="/alarms/:alarmId" element={<AlarmDetailPage />} />
+              <Route path="/alarm-rules" element={<AlarmRulesPage />} />
+              <Route path="/alarms/suppressions" element={<AlarmSuppressionsPage />} />
+            </Route>
             {/* 资产组（M1-asset §7：6 页路由 + 能力显隐） */}
             <Route element={<RequireCapability capability="assets.read" />}>
               <Route path="/assets" element={<AssetsOverviewPage />} />

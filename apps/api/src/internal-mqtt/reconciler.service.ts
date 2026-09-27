@@ -82,6 +82,7 @@ export class MqttReconcilerService implements OnModuleInit, OnApplicationShutdow
         if (!hasSession) {
           const applied = await this.gatewayStatus.transition(
             gateway.mqtt_client_id,
+            { id: gateway.id, name: gateway.name },
             gateway.tenant_id,
             'offline',
             Date.now(),

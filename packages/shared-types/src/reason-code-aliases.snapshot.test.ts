@@ -181,10 +181,6 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
     expect({ registered: registered.sort(), draft: draft.sort() }).toMatchInlineSnapshot(`
       {
         "draft": [
-          "ALARM_NOT_FOUND",
-          "ALARM_RULE_PARAMS_INVALID",
-          "ALARM_RULE_SCOPE_INVALID",
-          "ALARM_STATE_INVALID",
           "CONTROL_MODE_POINT_NOT_CONTROLLABLE",
           "CONTROL_MODE_SAME",
           "CONTROL_MODE_TRANSITION_INVALID",
@@ -203,10 +199,13 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "PROPOSAL_VERIFY_FAILED",
           "SCENE_NOT_FOUND",
           "STREAM_LIMIT_EXCEEDED",
-          "SUPPRESS_DURATION_INVALID",
         ],
         "registered": [
+          "ALARM_NOT_FOUND",
           "ALARM_RULE_NOT_FOUND",
+          "ALARM_RULE_PARAMS_INVALID",
+          "ALARM_RULE_SCOPE_INVALID",
+          "ALARM_STATE_INVALID",
           "BUILDING_NAME_REQUIRED",
           "BUILDING_NOT_FOUND",
           "CONFLICT",
@@ -239,6 +238,7 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "SCOPE_BUILDING_MISMATCH",
           "SELFCHECK_NOT_READY",
           "SERVICE_UNAUTHORIZED",
+          "SUPPRESS_DURATION_INVALID",
           "SYSTEM_NOT_FOUND",
           "SYSTEM_TYPE_UNKNOWN",
           "TELEMETRY_RANGE_INVALID",

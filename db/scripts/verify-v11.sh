@@ -104,8 +104,10 @@ INSERT INTO equipment (tenant_id, system_id, equipment_type, name)
   SELECT :'t', id, 'chiller', '1#冷机' FROM hvac_system WHERE tenant_id = :'t';
 INSERT INTO gateway (tenant_id, building_id, name, serial, mqtt_client_id)
   SELECT :'t', id, 'V11网关', 'V11-GW-001', 'v11-gw-001' FROM building WHERE tenant_id = :'t';
-INSERT INTO alarm_event (tenant_id, source_type, source_id, severity, message)
-  VALUES (:'t', 'equipment', 'V11-EQ-001', 'major', 'V11联动告警');
+-- 0006 起 alarm_event.category NOT NULL（R1）；fdd_finding 类别与用例 5 的
+-- fdd_finding.alarm_event_id 联动 FK 语义配对
+INSERT INTO alarm_event (tenant_id, source_type, source_id, severity, message, category)
+  VALUES (:'t', 'equipment', 'V11-EQ-001', 'major', 'V11联动告警', 'fdd_finding');
 COMMIT;
 SQL
 TENANT_A=$(psql -X -q -tAc "SELECT id FROM tenant WHERE slug = '${SLUG_A}'")

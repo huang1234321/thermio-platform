@@ -16,8 +16,32 @@ describe('reason_code registry snapshot', () => {
     );
     expect(skeleton).toMatchInlineSnapshot(`
       {
+        "alarm.not_found": {
+          "http": 404,
+        },
+        "alarm.rule_in_use": {
+          "http": 409,
+        },
         "alarm.rule_not_found": {
           "http": 404,
+        },
+        "alarm.rule_params_invalid": {
+          "http": 422,
+        },
+        "alarm.rule_scope_invalid": {
+          "http": 422,
+        },
+        "alarm.rule_type_unknown": {
+          "http": 422,
+        },
+        "alarm.severity_unknown": {
+          "http": 422,
+        },
+        "alarm.state_invalid": {
+          "http": 409,
+        },
+        "alarm.suppress_duration_invalid": {
+          "http": 422,
         },
         "asset.building_type_unknown": {
           "http": 422,

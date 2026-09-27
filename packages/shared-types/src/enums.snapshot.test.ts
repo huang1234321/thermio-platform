@@ -4,8 +4,13 @@
  */
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
+  ALARM_CATEGORIES,
+  ALARM_CLOSE_REASONS_SYSTEM,
   ALARM_EVENT_STATUSES,
+  ALARM_RULE_TYPES,
   ALARM_SCOPES,
+  ALARM_SEVERITIES,
+  ALARM_SUPPRESSION_END_REASONS,
   BUILDING_TYPES,
   CONFIG_AUDIT_FIELDS,
   CONTROL_ACTOR_TYPES,
@@ -21,11 +26,16 @@ import {
   MV_BASELINE_STATUSES,
   MV_METHODS,
   PROPOSAL_STATUSES,
+  QUALITY_EVENTS,
   QUANTITY_TYPES,
   ROLES,
   SOURCE_TYPES,
   SYSTEM_TYPES,
+  AlarmCategorySchema,
   AlarmEventStatusSchema,
+  AlarmRuleTypeSchema,
+  AlarmScopeSchema,
+  AlarmSeveritySchema,
   BuildingTypeSchema,
   ControlModeSchema,
   ImportFailureCodeSchema,
@@ -33,9 +43,15 @@ import {
   ImportJobStatusSchema,
   ImportRowMapStatusSchema,
   ProposalStatusSchema,
+  QualityEventSchema,
   SourceTypeSchema,
+  type AlarmCategory,
+  type AlarmCloseReasonSystem,
   type AlarmEventStatus,
+  type AlarmRuleType,
   type AlarmScope,
+  type AlarmSeverity,
+  type AlarmSuppressionEndReason,
   type BuildingType,
   type ConfigAuditField,
   type ControlActorType,
@@ -51,6 +67,7 @@ import {
   type MvBaselineStatus,
   type MvMethod,
   type ProposalStatus,
+  type QualityEvent,
   type QuantityType,
   type Role,
   type SourceType,
@@ -78,6 +95,13 @@ const ENUM_REGISTRY = {
   ALARM_SCOPES,
   ALARM_EVENT_STATUSES,
   BUILDING_TYPES,
+  // M4 告警域增量（IMPL-13 / DAT-116，DAT-104 管道）
+  ALARM_SEVERITIES,
+  ALARM_RULE_TYPES,
+  ALARM_CATEGORIES,
+  ALARM_CLOSE_REASONS_SYSTEM,
+  ALARM_SUPPRESSION_END_REASONS,
+  QUALITY_EVENTS,
   // 导入域（DAT-104 随消费方 IMPL-15/DAT-118 落地；platform.md §6.3 v1.1 × ddl.md §9.1）
   IMPORT_JOB_STATUSES,
   IMPORT_ROW_MAP_STATUSES,
@@ -89,16 +113,48 @@ describe('enum registry snapshot', () => {
   it('shouldRequireExplicitSnapshotUpdate_whenAnyEnumValueChanges', () => {
     expect(ENUM_REGISTRY).toMatchInlineSnapshot(`
       {
+        "ALARM_CATEGORIES": [
+          "point_stale",
+          "gateway_offline",
+          "fdd_finding",
+          "control_verify_failed",
+          "control_lease_rollback",
+          "control_drift",
+        ],
+        "ALARM_CLOSE_REASONS_SYSTEM": [
+          "auto_recovered",
+          "root_group_cascade",
+          "point_disabled",
+        ],
         "ALARM_EVENT_STATUSES": [
           "open",
           "acked",
           "closed",
           "suppressed",
         ],
+        "ALARM_RULE_TYPES": [
+          "point_stale",
+          "gateway_offline",
+          "fdd_finding",
+        ],
         "ALARM_SCOPES": [
           "point",
           "equipment",
           "system",
+          "gateway",
+        ],
+        "ALARM_SEVERITIES": [
+          "info",
+          "warning",
+          "minor",
+          "major",
+          "critical",
+        ],
+        "ALARM_SUPPRESSION_END_REASONS": [
+          "expired",
+          "unsuppressed",
+          "alarm_closed",
+          "superseded",
         ],
         "BUILDING_TYPES": [
           "office",
@@ -199,6 +255,12 @@ describe('enum registry snapshot', () => {
           "executed",
           "failed",
         ],
+        "QUALITY_EVENTS": [
+          "stale_set",
+          "stale_clear",
+          "ts_skew",
+          "unit_unconverted",
+        ],
         "QUANTITY_TYPES": [
           "chw_supply_temp",
           "power",
@@ -246,6 +308,16 @@ describe('enum schema/type single source (platform.md §5.3)', () => {
     expectTypeOf<AlarmScope>().toEqualTypeOf<(typeof ALARM_SCOPES)[number]>();
     expectTypeOf<AlarmEventStatus>().toEqualTypeOf<(typeof ALARM_EVENT_STATUSES)[number]>();
     expectTypeOf<BuildingType>().toEqualTypeOf<(typeof BUILDING_TYPES)[number]>();
+    expectTypeOf<AlarmSeverity>().toEqualTypeOf<(typeof ALARM_SEVERITIES)[number]>();
+    expectTypeOf<AlarmRuleType>().toEqualTypeOf<(typeof ALARM_RULE_TYPES)[number]>();
+    expectTypeOf<AlarmCategory>().toEqualTypeOf<(typeof ALARM_CATEGORIES)[number]>();
+    expectTypeOf<AlarmCloseReasonSystem>().toEqualTypeOf<
+      (typeof ALARM_CLOSE_REASONS_SYSTEM)[number]
+    >();
+    expectTypeOf<AlarmSuppressionEndReason>().toEqualTypeOf<
+      (typeof ALARM_SUPPRESSION_END_REASONS)[number]
+    >();
+    expectTypeOf<QualityEvent>().toEqualTypeOf<(typeof QUALITY_EVENTS)[number]>();
     expectTypeOf<ImportJobStatus>().toEqualTypeOf<(typeof IMPORT_JOB_STATUSES)[number]>();
     expectTypeOf<ImportRowMapStatus>().toEqualTypeOf<(typeof IMPORT_ROW_MAP_STATUSES)[number]>();
     expectTypeOf<ImportIssueCode>().toEqualTypeOf<(typeof IMPORT_ISSUE_CODES)[number]>();
@@ -261,6 +333,11 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmEventStatusSchema.safeParse('reopened').success).toBe(false);
     expect(SourceTypeSchema.safeParse('modbus').success).toBe(false);
     expect(BuildingTypeSchema.safeParse('school').success).toBe(false);
+    // M4 告警域增量（DAT-104：闭合集拒绝随注册表同步覆盖）
+    expect(AlarmSeveritySchema.safeParse('fatal').success).toBe(false);
+    expect(AlarmRuleTypeSchema.safeParse('value_threshold').success).toBe(false);
+    expect(AlarmCategorySchema.safeParse('infra_tsdb_down').success).toBe(false);
+    expect(QualityEventSchema.safeParse('stale').success).toBe(false);
     // 导入域（DAT-104：随 IMPL-15 落地的两组 + 两个封闭集）
     expect(ImportJobStatusSchema.safeParse('importing').success).toBe(false);
     expect(ImportRowMapStatusSchema.safeParse('skipped').success).toBe(false);
@@ -271,6 +348,10 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
   it('shouldParseKnownValue_whenValueIsInTheRegistry', () => {
     expect(ControlModeSchema.safeParse('advisory').success).toBe(true);
     expect(ProposalStatusSchema.safeParse('executed').success).toBe(true);
+    expect(AlarmSeveritySchema.safeParse('critical').success).toBe(true);
+    expect(AlarmRuleTypeSchema.safeParse('gateway_offline').success).toBe(true);
+    expect(AlarmCategorySchema.safeParse('control_drift').success).toBe(true);
+    expect(AlarmScopeSchema.safeParse('gateway').success).toBe(true);
     expect(ImportJobStatusSchema.safeParse('validated').success).toBe(true);
     expect(ImportRowMapStatusSchema.safeParse('manual').success).toBe(true);
   });

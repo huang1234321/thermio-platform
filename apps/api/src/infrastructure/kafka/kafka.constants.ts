@@ -11,5 +11,8 @@ export const TOPIC_CONTROL_PROPOSAL = 'thermio.control.proposal';
 /** ADR-004：thermio.control.executed（分区 16，保留 30d）。 */
 export const TOPIC_CONTROL_EXECUTED = 'thermio.control.executed';
 
+/** ADR-004：thermio.telemetry.quality（质量事件；M4 引擎消费，保留 ≥24h——R7）。 */
+export const TOPIC_TELEMETRY_QUALITY = 'thermio.telemetry.quality';
+
 /** 消息头键名（ADR-017：Kafka 消息头 trace_id 透传）。 */
 export const TRACE_ID_HEADER = 'trace_id';

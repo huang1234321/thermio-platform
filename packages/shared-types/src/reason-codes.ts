@@ -11,6 +11,7 @@
  *   `thermio_gate_rejections_total{gate=…}` 的 label 取值（ADR-017，一次定义两处消费）。
  */
 import { z } from 'zod';
+import { ALARM_SUPPRESS_DURATION_S } from './enums.js';
 
 /** 五道闸门的 cause 子串（ADR-009；§5.2「与 ADR-017 的咬合」）。 */
 export const GATE_CAUSES = [
@@ -66,6 +67,12 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * - 接入域三码 gateway.not_found / gateway.serial_duplicate / credential.not_found /
  *   credential.limit_exceeded（R6：platform 种子未覆盖接入域）。
  *
+ * 五批注册（IMPL-13 / DAT-116，告警引擎与告警中心，modules M4-alarm.md §1.2 落码值逐字）：
+ * - alarm.not_found（404，SEC-AZ-03 越权同码；种子仅 rule_not_found）；
+ * - alarm.state_invalid（409，状态机非法迁移）；
+ * - 校验类 alarm.suppress_duration_invalid / alarm.rule_scope_invalid /
+ *   alarm.rule_params_invalid / alarm.rule_type_unknown / alarm.severity_unknown（422）；
+ * - alarm.rule_in_use（409，DELETE 被引用——FK RESTRICT 应用层映射）。
  * 五批注册（IMPL-15 / DAT-118，点表导入向导，modules M2-import.md §1.2 增量 8 码逐字；
  * `import.template_mismatch` **不落 HTTP 码**——表头不符为异步解析期发现，由作业
  * failure.code='template_mismatch' 承载（M2-import §1.3/R1），故不入本表）：
@@ -113,6 +120,14 @@ export const REASON_CODES = [
   'mv.baseline_not_active',
   'mv.period_invalid',
   'alarm.rule_not_found',
+  'alarm.not_found',
+  'alarm.state_invalid',
+  'alarm.suppress_duration_invalid',
+  'alarm.rule_scope_invalid',
+  'alarm.rule_params_invalid',
+  'alarm.rule_type_unknown',
+  'alarm.severity_unknown',
+  'alarm.rule_in_use',
   'point.no_data',
   'telemetry.range_invalid',
   'telemetry.store_unavailable',
@@ -342,6 +357,46 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'alarm',
     http: 404,
     description: '告警规则不存在',
+  },
+  'alarm.not_found': {
+    domain: 'alarm',
+    http: 404,
+    description: '告警事件不存在或越权（SEC-AZ-03 不区分，M4-alarm.md §1.2）',
+  },
+  'alarm.state_invalid': {
+    domain: 'alarm',
+    http: 409,
+    description: '告警状态机非法迁移（ack/close/suppress/unsuppress 前置状态不满足）',
+  },
+  'alarm.suppress_duration_invalid': {
+    domain: 'alarm',
+    http: 422,
+    description: `抑制时长越界 [${String(ALARM_SUPPRESS_DURATION_S.min)}, ${String(ALARM_SUPPRESS_DURATION_S.max)}] 秒`,
+  },
+  'alarm.rule_scope_invalid': {
+    domain: 'alarm',
+    http: 422,
+    description: 'scope 取值非法、scope_id 类型不符或 rule_type × scope 组合不合法',
+  },
+  'alarm.rule_params_invalid': {
+    domain: 'alarm',
+    http: 422,
+    description: '规则 params 不符合 rule_type schema（未知键/越界）',
+  },
+  'alarm.rule_type_unknown': {
+    domain: 'alarm',
+    http: 422,
+    description: 'rule_type 不在 ALARM_RULE_TYPES（沿 asset.*_unknown 先例）',
+  },
+  'alarm.severity_unknown': {
+    domain: 'alarm',
+    http: 422,
+    description: 'severity 不在 ALARM_SEVERITIES',
+  },
+  'alarm.rule_in_use': {
+    domain: 'alarm',
+    http: 409,
+    description: '规则仍被 alarm_event 引用（FK RESTRICT 应用层映射；归档式停用 = enabled=false）',
   },
   'point.no_data': {
     domain: 'point',

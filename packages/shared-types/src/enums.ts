@@ -114,8 +114,12 @@ export const MV_METHODS = ['ipmvp_option_c'] as const;
 export const MvMethodSchema = z.enum(MV_METHODS);
 export type MvMethod = z.infer<typeof MvMethodSchema>;
 
-/** 告警规则作用域（DATA-MODEL §3.7 alarm_rule.scope）。 */
-export const ALARM_SCOPES = ['point', 'equipment', 'system'] as const;
+/**
+ * 告警规则作用域（DATA-MODEL §3.7 alarm_rule.scope）。
+ * IMPL-13 增补 'gateway'（M4-alarm.md §4.1 R3：源头 ddl.md §7 差异 #7 已定
+ * 「scope/source_type 增加 gateway」——网关离线告警链路）。
+ */
+export const ALARM_SCOPES = ['point', 'equipment', 'system', 'gateway'] as const;
 export const AlarmScopeSchema = z.enum(ALARM_SCOPES);
 export type AlarmScope = z.infer<typeof AlarmScopeSchema>;
 
@@ -130,6 +134,90 @@ export const BuildingTypeSchema = z.enum(BUILDING_TYPES);
 export type BuildingType = z.infer<typeof BuildingTypeSchema>;
 
 // ---------------------------------------------------------------------------
+// M4 告警域增量（IMPL-13 / DAT-116，M4-alarm.md §4.1 定稿；DAT-104 管道：
+// ALARM_SEVERITIES 以开工时点 platform.md §6.3 与 ddl.md §4 CHECK 逐值对照，
+// 零自造——2026-09-27 两源均为 info|warning|minor|major|critical）
+// ---------------------------------------------------------------------------
+
+/**
+ * 告警/FDD 同源五级（platform.md §6.3 ALARM_SEVERITIES；源头 ddl.md §4
+ * alarm_rule/alarm_event severity CHECK）。
+ */
+export const ALARM_SEVERITIES = ['info', 'warning', 'minor', 'major', 'critical'] as const;
+export const AlarmSeveritySchema = z.enum(ALARM_SEVERITIES);
+export type AlarmSeverity = z.infer<typeof AlarmSeveritySchema>;
+
+/**
+ * 可配置规则类型（M4-alarm.md §4.1；新增 = 发版动作，platform §6.1）。
+ * 值阈值规则不建（R8：引擎不消费 raw telemetry，platform §1 边界）。
+ */
+export const ALARM_RULE_TYPES = ['point_stale', 'gateway_offline', 'fdd_finding'] as const;
+export const AlarmRuleTypeSchema = z.enum(ALARM_RULE_TYPES);
+export type AlarmRuleType = z.infer<typeof AlarmRuleTypeSchema>;
+
+/**
+ * 告警行类别（M4-alarm.md §4.1）= 规则命中类 ∪ 直写类（control-safety §5.4
+ * 「不新建告警类型」= 不进规则目录，走引擎直写通道）。
+ */
+export const ALARM_CATEGORIES = [
+  ...ALARM_RULE_TYPES,
+  'control_verify_failed',
+  'control_lease_rollback',
+  'control_drift',
+] as const;
+export const AlarmCategorySchema = z.enum(ALARM_CATEGORIES);
+export type AlarmCategory = z.infer<typeof AlarmCategorySchema>;
+
+/** 系统关闭原因机器标记（M4-alarm.md §4.1；人工关闭 = 自由文本 close_reason）。 */
+export const ALARM_CLOSE_REASONS_SYSTEM = [
+  'auto_recovered',
+  'root_group_cascade',
+  'point_disabled',
+] as const;
+export const AlarmCloseReasonSystemSchema = z.enum(ALARM_CLOSE_REASONS_SYSTEM);
+export type AlarmCloseReasonSystem = z.infer<typeof AlarmCloseReasonSystemSchema>;
+
+/** 抑制行结束原因（M4-alarm.md §2.4 alarm_suppression.ended_reason CHECK 逐字）。 */
+export const ALARM_SUPPRESSION_END_REASONS = [
+  'expired',
+  'unsuppressed',
+  'alarm_closed',
+  'superseded',
+] as const;
+export const AlarmSuppressionEndReasonSchema = z.enum(ALARM_SUPPRESSION_END_REASONS);
+export type AlarmSuppressionEndReason = z.infer<typeof AlarmSuppressionEndReasonSchema>;
+
+/** 抑制时长值域秒（M4-alarm.md §3.6：5min..24h 维护窗口语义）。 */
+export const ALARM_SUPPRESS_DURATION_S = { min: 300, max: 86400 } as const;
+
+/**
+ * sustained_s 分级默认表（M4-alarm.md §4.1 定夺：critical 即时，warning 需持续达标；
+ * severity 缺省时按此表补全落库）。
+ */
+export const ALARM_SUSTAINED_S_DEFAULT: Readonly<Record<AlarmSeverity, number>> = {
+  critical: 0,
+  major: 60,
+  minor: 300,
+  warning: 300,
+  info: 900,
+};
+
+/** recovery_s 回稳窗默认（M4-alarm.md §4.1 表；fdd_finding 默认 0 即时）。 */
+export const ALARM_RECOVERY_S_DEFAULT = {
+  point_stale: 300,
+  gateway_offline: 120,
+  fdd_finding: 0,
+} as const;
+
+/**
+ * ingest 质量事件 event 值集（M4-alarm.md §5.3/R7：随 shared-types 钉死；
+ * M4 引擎仅消费 stale_set/stale_clear 边沿——ts_skew/unit_unconverted 为
+ * 观测事件，告警去抖口径归 DAT-122 归属卡，v1 不建规则）。
+ */
+export const QUALITY_EVENTS = ['stale_set', 'stale_clear', 'ts_skew', 'unit_unconverted'] as const;
+export const QualityEventSchema = z.enum(QUALITY_EVENTS);
+export type QualityEvent = z.infer<typeof QualityEventSchema>;
+
 // 导入域（M2 点表导入；platform.md §6.3 v1.1 增补，源头 = ddl.md §9.1 CHECK 集，
 // 非 DATA-MODEL v1.1——DAT-104 管道：随消费方 IMPL-15 落地，对照时点 2026-09-27）
 // ---------------------------------------------------------------------------

@@ -45,8 +45,19 @@ describe('interval → 物理对象路由（闭合映射）', () => {
   it('shouldSelectExactlyTheCaggColumnSet_fromDdlS112', () => {
     const sql = buildAggregateQuery('5min', WINDOW).text;
     expect(sql).toContain(
-      'SELECT bucket, avg, min, max, last, stddev, sample_count, bad_count, quality_mask',
+      'SELECT bucket, avg, min, max, last, stddev, sample_count::int AS sample_count, bad_count::int AS bad_count, quality_mask',
     );
+  });
+
+  it('shouldCastCaggCountColumnsToInt_pgBigintSerializesAsString', () => {
+    // DAT-117 回归钉：cagg count(*) 为 bigint → node-pg 出 JSON string，
+    // 违约 shared-types z.number().int()（5min/1h 消费方被 zod 整体拒绝）。
+    // SELECT 层 ::int 强转后 pg 按 int4 → number 出值；两个 interval 都要钉住。
+    for (const interval of ['5min', '1h'] as const) {
+      const sql = buildAggregateQuery(interval, WINDOW).text;
+      expect(sql).toContain('sample_count::int AS sample_count');
+      expect(sql).toContain('bad_count::int AS bad_count');
+    }
   });
 });
 

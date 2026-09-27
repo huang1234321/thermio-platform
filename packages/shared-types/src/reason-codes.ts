@@ -73,7 +73,8 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  *   platform §10 在用码，与 M1 单资源 asset.not_found 的分工见 M3-monitor R4）；
  * - stream.server_busy（503，SSE 每实例并发连接 ≥100，响应附 Retry-After: 5，M3-monitor R5）。
  *
- * 七批注册（IMPL-17 / DAT-163，建议提交与审批，modules/M5-proposal.md §1.2 落码值逐字）：
+ * 七批注册（IMPL-17 / DAT-163，建议提交与审批，modules/M5-proposal.md §1.2 落码值逐字；
+ * 并集注记：八批（IMPL-15 / DAT-118 import 八码）与本批并行开发同号合入，编号顺延自此起算）：
  * - proposal.not_found（404，SEC-AZ-03 越权同码；execution 从属视图同码）；
  * - proposal.state_invalid（409，已决策再 approve/reject，details.current_status）；
  * - proposal.expired（409，approve/reject 时 expires_at 已过且仍 pending）；
@@ -89,6 +90,17 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * - 校验类 alarm.suppress_duration_invalid / alarm.rule_scope_invalid /
  *   alarm.rule_params_invalid / alarm.rule_type_unknown / alarm.severity_unknown（422）；
  * - alarm.rule_in_use（409，DELETE 被引用——FK RESTRICT 应用层映射）。
+ * 七批注册（IMPL-15 / DAT-118，点表导入向导，modules M2-import.md §1.2 增量 8 码逐字；
+ * `import.template_mismatch` **不落 HTTP 码**——表头不符为异步解析期发现，由作业
+ * failure.code='template_mismatch' 承载（M2-import §1.3/R1），故不入本表）：
+ * - import.not_found（404，details.entity ∈ {import_job, import_row}）；
+ * - import.state_invalid（409，状态机守卫，details: {current_status, allowed}）；
+ * - import.file_invalid（422，同步文件级校验：非 xlsx 容器/超 5 MB/空文件/容器损坏）；
+ * - import.building_mismatch（422，gateway.building_id ≠ 请求 building_id）；
+ * - import.gateway_offline（409，apply 同步预检：目标网关 offline）；
+ * - import.apply_conflict（409，apply 同步预检主面 + 登记事务内竞态兜底，details.conflicts）；
+ * - import.unit_conversion_unsupported（422，PATCH 即时校验 + apply 复核双面）；
+ * - import.selfcheck_not_ready（404，details.reason ∈ {never_run, in_progress}）。
  */
 export const REASON_CODES = [
   'common.validation_failed',
@@ -145,6 +157,14 @@ export const REASON_CODES = [
   'proposal.payload_invalid',
   'proposal.reason_required',
   'proposal.client_ref_duplicate',
+  'import.not_found',
+  'import.state_invalid',
+  'import.file_invalid',
+  'import.building_mismatch',
+  'import.gateway_offline',
+  'import.apply_conflict',
+  'import.unit_conversion_unsupported',
+  'import.selfcheck_not_ready',
 ] as const;
 
 export const ReasonCodeSchema = z.enum(REASON_CODES);
@@ -472,6 +492,52 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     http: 409,
     description:
       'internal 提交同 client_ref 信封不一致重放（幂等重放应 201；M5 §1.2〔R2〕——DDL 落列前不启用，注册占位）',
+  },
+  'import.not_found': {
+    domain: 'import',
+    http: 404,
+    description:
+      '导入作业/行不存在或越权（details.entity ∈ {import_job, import_row}；SEC-AZ-03 不区分不存在与越界）',
+  },
+  'import.state_invalid': {
+    domain: 'import',
+    http: 409,
+    description:
+      '作业状态机守卫拒绝（details: {current_status, allowed}；守卫矩阵见 M2-import §4.2）',
+  },
+  'import.file_invalid': {
+    domain: 'import',
+    http: 422,
+    description:
+      '上传文件级校验失败：非 xlsx 容器、超 5 MB、空文件、容器损坏（details.reason ∈ {size_exceeded, not_xlsx, empty, corrupt}；同步拒绝、作业不入库）',
+  },
+  'import.building_mismatch': {
+    domain: 'import',
+    http: 422,
+    description: '网关归属楼宇与请求楼宇不一致（ddl §9.1 应用层一致性校验的端点化）',
+  },
+  'import.gateway_offline': {
+    domain: 'import',
+    http: 409,
+    description: 'apply 同步预检：目标网关 status=offline（推送必失败的前置拦截）',
+  },
+  'import.apply_conflict': {
+    domain: 'import',
+    http: 409,
+    description:
+      'apply 与已注册点位 raw_name 冲突（details.conflicts 行清单；同步预检主面 + 登记事务内竞态兜底双面）',
+  },
+  'import.unit_conversion_unsupported': {
+    domain: 'import',
+    http: 422,
+    description:
+      '单位对无转换规则（PATCH rows 即时校验 + apply 复核双面；行级 dry-run 形态为 issue unit_unsupported）',
+  },
+  'import.selfcheck_not_ready': {
+    domain: 'import',
+    http: 404,
+    description:
+      '自检报告未生成（details.reason ∈ {never_run, in_progress}；作业不存在走 import.not_found）',
   },
 };
 

@@ -238,3 +238,81 @@ export const ALARM_RECOVERY_S_DEFAULT = {
 export const QUALITY_EVENTS = ['stale_set', 'stale_clear', 'ts_skew', 'unit_unconverted'] as const;
 export const QualityEventSchema = z.enum(QUALITY_EVENTS);
 export type QualityEvent = z.infer<typeof QualityEventSchema>;
+
+// 导入域（M2 点表导入；platform.md §6.3 v1.1 增补，源头 = ddl.md §9.1 CHECK 集，
+// 非 DATA-MODEL v1.1——DAT-104 管道：随消费方 IMPL-15 落地，对照时点 2026-09-27）
+// ---------------------------------------------------------------------------
+
+/** 导入作业状态机（ddl.md §9.1 import_job.status CHECK；六值封闭集，failed 为终态）。 */
+export const IMPORT_JOB_STATUSES = [
+  'parsed',
+  'mapping',
+  'validated',
+  'applied',
+  'checked',
+  'failed',
+] as const;
+export const ImportJobStatusSchema = z.enum(IMPORT_JOB_STATUSES);
+export type ImportJobStatus = z.infer<typeof ImportJobStatusSchema>;
+
+/** 行映射来源三态（ddl.md §9.1 import_row.map_status CHECK；「已映射」判定锚 = quantity_type 非空）。 */
+export const IMPORT_ROW_MAP_STATUSES = ['unmapped', 'auto', 'manual'] as const;
+export const ImportRowMapStatusSchema = z.enum(IMPORT_ROW_MAP_STATUSES);
+export type ImportRowMapStatus = z.infer<typeof ImportRowMapStatusSchema>;
+
+/** dry-run 行级/作业级问题码（issues jsonb 的 code 值域，M2-import §1.6/§7；封闭集）。 */
+export const IMPORT_ISSUE_CODES = [
+  'row_unmapped', // 阻塞：quantity_type 为空
+  'raw_name_duplicate_internal', // 阻塞：表内 raw_name 重复
+  'raw_name_conflict_existing', // 阻塞：与同网关已注册点冲突（IMPORT_APPLY_CONFLICT 行面）
+  'quantity_type_unknown', // 阻塞：枚举值域外（防御性，PATCH 已拦）
+  'write_point_not_numeric', // 阻塞：写点量类型非数值量（P2-3）
+  'unit_unsupported', // 阻塞：单位对无转换规则（UNIT_CONVERSION_UNSUPPORTED 行面）
+  'unit_std_missing', // 警告：unit_raw 非空而 unit_std 空（直通语义）
+  'equipment_unassigned', // 警告：已映射但未指定设备（独立测点合法）
+  'write_point_clamp_pending', // 警告：写点闸门参数待 M8 配置（apply 后置动作）
+  'gateway_offline', // 作业级警告：网关当前离线（apply 将被 409 拦）
+  'offline_action_ref_unresolved', // 作业级警告：offline_action 引用点不可解析（M1-R10 收口）
+] as const;
+export const ImportIssueCodeSchema = z.enum(IMPORT_ISSUE_CODES);
+export type ImportIssueCode = z.infer<typeof ImportIssueCodeSchema>;
+
+/** 作业 failure.code 值域（failure jsonb，M2-import §1.6/§4.4；封闭集）。 */
+export const IMPORT_FAILURE_CODES = [
+  'template_mismatch', // parse 段：表头不符（IMPORT_TEMPLATE_MISMATCH 承载）
+  'row_limit_exceeded', // parse 段：数据行超 5,000
+  'sheet_corrupt', // parse 段：工作表损坏/不可读
+  'gateway_ack_timeout', // apply_push 段：应答超时（重试耗尽）
+  'gateway_ack_partial', // apply_push 段：部分点应答失败（失败清单入 failure.rows）
+  'gateway_ack_failed', // apply_push 段：网关整体拒绝
+] as const;
+export const ImportFailureCodeSchema = z.enum(IMPORT_FAILURE_CODES);
+export type ImportFailureCode = z.infer<typeof ImportFailureCodeSchema>;
+
+/** 表格方向列容错映射（M2-import §1.6/§5.2；键小写化后匹配，未知值解析期从严拒绝）。 */
+export const IMPORT_TOLERANT_DIRECTIONS = {
+  read: 'read',
+  只读: 'read',
+  ro: 'read',
+  write: 'write',
+  写: 'write',
+  wo: 'write',
+  readwrite: 'readwrite',
+  读写: 'readwrite',
+  rw: 'readwrite',
+} as const;
+export type ImportTolerantDirection = keyof typeof IMPORT_TOLERANT_DIRECTIONS;
+export type ImportDirection = (typeof IMPORT_TOLERANT_DIRECTIONS)[ImportTolerantDirection];
+
+/**
+ * 量类型语义分类（P2-3 写点数值量判据；随 QUANTITY_TYPES 扩充同步维护）。
+ * Record 形状由 import.test.ts 钉死与 QUANTITY_TYPES 键集一致。
+ */
+export const QUANTITY_KINDS = {
+  chw_supply_temp: 'numeric',
+  power: 'numeric',
+  run_status: 'enum',
+  energy: 'numeric', // R12 增量（M3-monitor §11）：能量累计量 kWh，数值量
+  load_rate: 'numeric', // R12 增量：负荷率 %，数值量（P2-3 写点判据同适用）
+} as const satisfies Record<QuantityType, 'numeric' | 'enum'>;
+export type QuantityKind = (typeof QUANTITY_KINDS)[QuantityType];

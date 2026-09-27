@@ -106,6 +106,30 @@ describe('reason_code registry snapshot', () => {
         "gateway.serial_duplicate": {
           "http": 409,
         },
+        "import.apply_conflict": {
+          "http": 409,
+        },
+        "import.building_mismatch": {
+          "http": 422,
+        },
+        "import.file_invalid": {
+          "http": 422,
+        },
+        "import.gateway_offline": {
+          "http": 409,
+        },
+        "import.not_found": {
+          "http": 404,
+        },
+        "import.selfcheck_not_ready": {
+          "http": 404,
+        },
+        "import.state_invalid": {
+          "http": 409,
+        },
+        "import.unit_conversion_unsupported": {
+          "http": 422,
+        },
         "mv.baseline_not_active": {
           "http": 409,
         },

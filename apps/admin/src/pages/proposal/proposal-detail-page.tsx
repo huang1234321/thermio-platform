@@ -47,6 +47,7 @@ import {
   valueChainText,
 } from './proposal-shared.js';
 import { approveProposal, newIdempotencyKey, rejectProposal } from './proposal-actions.js';
+import { useProposalPolling } from './proposal-hooks.js';
 
 export function ProposalDetailPage(): React.ReactNode {
   const { proposalId } = useParams();
@@ -74,6 +75,21 @@ export function ProposalDetailPage(): React.ReactNode {
       setLoading(false);
     }
   }, [proposalId]);
+
+  // M5 §7（B2）：approve 成功 → approved 态 3s 轮询，终态停 / 30 次上限。
+  // enabled 门控：只在 approved 态开窗轮询，终态/驳回/待确认不空转。
+  const pollLoad = useCallback(async (): Promise<ProposalDetail | null> => {
+    if (proposalId === undefined) return null;
+    return apiFetch(`/proposals/${proposalId}`, ProposalDetailSchema);
+  }, [proposalId]);
+  useProposalPolling(
+    pollLoad,
+    (data) => data?.status === 'approved',
+    (data) => {
+      if (data !== null) setDetail(data);
+    },
+    detail?.status === 'approved',
+  );
 
   useEffect(() => {
     void load();

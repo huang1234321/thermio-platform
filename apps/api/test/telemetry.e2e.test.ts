@@ -83,6 +83,7 @@ function buildStore() {
           .slice(0, window.fetchLimit),
       );
     },
+    presentInWindow: () => Promise.resolve(new Set<number>()), // IMPL-15 自检面（本套不触达）
   };
   return store;
 }

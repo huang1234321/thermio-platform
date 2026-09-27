@@ -21,6 +21,10 @@ import {
   EQUIPMENT_TYPES,
   FDD_FINDING_STATUSES,
   FDD_REPORT_PERIOD_TYPES,
+  IMPORT_FAILURE_CODES,
+  IMPORT_ISSUE_CODES,
+  IMPORT_JOB_STATUSES,
+  IMPORT_ROW_MAP_STATUSES,
   MV_BASELINE_STATUSES,
   MV_METHODS,
   PROPOSAL_STATUSES,
@@ -38,6 +42,10 @@ import {
   FddFindingStatusSchema,
   FddReportPeriodTypeSchema,
   ControlModeSchema,
+  ImportFailureCodeSchema,
+  ImportIssueCodeSchema,
+  ImportJobStatusSchema,
+  ImportRowMapStatusSchema,
   ProposalStatusSchema,
   QualityEventSchema,
   SourceTypeSchema,
@@ -58,6 +66,10 @@ import {
   type EquipmentType,
   type FddFindingStatus,
   type FddReportPeriodType,
+  type ImportFailureCode,
+  type ImportIssueCode,
+  type ImportJobStatus,
+  type ImportRowMapStatus,
   type MvBaselineStatus,
   type MvMethod,
   type ProposalStatus,
@@ -96,6 +108,11 @@ const ENUM_REGISTRY = {
   ALARM_CLOSE_REASONS_SYSTEM,
   ALARM_SUPPRESSION_END_REASONS,
   QUALITY_EVENTS,
+  // 导入域（DAT-104 随消费方 IMPL-15/DAT-118 落地；platform.md §6.3 v1.1 × ddl.md §9.1）
+  IMPORT_JOB_STATUSES,
+  IMPORT_ROW_MAP_STATUSES,
+  IMPORT_ISSUE_CODES,
+  IMPORT_FAILURE_CODES,
 } as const;
 
 describe('enum registry snapshot', () => {
@@ -194,6 +211,40 @@ describe('enum registry snapshot', () => {
           "sensor",
           "energy_meter",
         ],
+        "IMPORT_FAILURE_CODES": [
+          "template_mismatch",
+          "row_limit_exceeded",
+          "sheet_corrupt",
+          "gateway_ack_timeout",
+          "gateway_ack_partial",
+          "gateway_ack_failed",
+        ],
+        "IMPORT_ISSUE_CODES": [
+          "row_unmapped",
+          "raw_name_duplicate_internal",
+          "raw_name_conflict_existing",
+          "quantity_type_unknown",
+          "write_point_not_numeric",
+          "unit_unsupported",
+          "unit_std_missing",
+          "equipment_unassigned",
+          "write_point_clamp_pending",
+          "gateway_offline",
+          "offline_action_ref_unresolved",
+        ],
+        "IMPORT_JOB_STATUSES": [
+          "parsed",
+          "mapping",
+          "validated",
+          "applied",
+          "checked",
+          "failed",
+        ],
+        "IMPORT_ROW_MAP_STATUSES": [
+          "unmapped",
+          "auto",
+          "manual",
+        ],
         "MV_BASELINE_STATUSES": [
           "draft",
           "active",
@@ -277,6 +328,10 @@ describe('enum schema/type single source (platform.md §5.3)', () => {
       (typeof ALARM_SUPPRESSION_END_REASONS)[number]
     >();
     expectTypeOf<QualityEvent>().toEqualTypeOf<(typeof QUALITY_EVENTS)[number]>();
+    expectTypeOf<ImportJobStatus>().toEqualTypeOf<(typeof IMPORT_JOB_STATUSES)[number]>();
+    expectTypeOf<ImportRowMapStatus>().toEqualTypeOf<(typeof IMPORT_ROW_MAP_STATUSES)[number]>();
+    expectTypeOf<ImportIssueCode>().toEqualTypeOf<(typeof IMPORT_ISSUE_CODES)[number]>();
+    expectTypeOf<ImportFailureCode>().toEqualTypeOf<(typeof IMPORT_FAILURE_CODES)[number]>();
   });
 });
 
@@ -296,6 +351,11 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     // FDD 域（IMPL-17 并入项，DAT-104 管道同步覆盖）
     expect(FddFindingStatusSchema.safeParse('closed').success).toBe(false);
     expect(FddReportPeriodTypeSchema.safeParse('month').success).toBe(false);
+    // 导入域（DAT-104：随 IMPL-15 落地的两组 + 两个封闭集）
+    expect(ImportJobStatusSchema.safeParse('importing').success).toBe(false);
+    expect(ImportRowMapStatusSchema.safeParse('skipped').success).toBe(false);
+    expect(ImportIssueCodeSchema.safeParse('row_skipped').success).toBe(false);
+    expect(ImportFailureCodeSchema.safeParse('header_missing').success).toBe(false);
   });
 
   it('shouldParseKnownValue_whenValueIsInTheRegistry', () => {
@@ -307,5 +367,7 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmScopeSchema.safeParse('gateway').success).toBe(true);
     expect(FddFindingStatusSchema.safeParse('ignored').success).toBe(true);
     expect(FddReportPeriodTypeSchema.safeParse('week').success).toBe(true);
+    expect(ImportJobStatusSchema.safeParse('validated').success).toBe(true);
+    expect(ImportRowMapStatusSchema.safeParse('manual').success).toBe(true);
   });
 });

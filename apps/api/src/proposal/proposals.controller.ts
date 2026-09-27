@@ -23,8 +23,11 @@ import {
 } from '@nestjs/common';
 import { z } from 'zod';
 import { ControlAuditListQuerySchema, ProposalListQuerySchema } from '@thermio/shared-types';
-import { ZodValidationPipe } from '../infrastructure/validation/zod-validation.pipe.js';
-import { zodFieldIssues } from '../infrastructure/validation/zod-validation.pipe.js';
+import {
+  ZodValidationPipe,
+  validationFieldOf,
+  zodFieldIssues,
+} from '../infrastructure/validation/zod-validation.pipe.js';
 import { ReasonCodeException } from '../infrastructure/errors/reason-code.exception.js';
 import { CapabilitiesGuard } from '../auth/capabilities.guard.js';
 import { CurrentAuth, type AuthContext } from '../auth/auth-context.js';
@@ -61,7 +64,9 @@ export class ProposalsController {
   ): Promise<unknown> {
     const parsed = ProposalListQuerySchema.safeParse(query);
     if (!parsed.success) {
+      // M5 §3.1：白名单外参数 → details.field=<param>（path→field shim，B1）
       throw new ReasonCodeException('common.validation_failed', '查询参数非法', {
+        field: validationFieldOf(parsed.error),
         issues: zodFieldIssues(parsed.error),
       });
     }
@@ -164,6 +169,7 @@ export class ProposalsController {
     const parsed = ControlAuditListQuerySchema.safeParse(query);
     if (!parsed.success) {
       throw new ReasonCodeException('common.validation_failed', '查询参数非法', {
+        field: validationFieldOf(parsed.error), // M5 §3.1（B1）
         issues: zodFieldIssues(parsed.error),
       });
     }

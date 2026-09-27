@@ -20,6 +20,22 @@ export function zodFieldIssues(error: ZodError): Record<string, string> {
   }, {});
 }
 
+/**
+ * zod issues path→field shim（M5 §3.1：白名单外参数 → details.field=<param>）：
+ * - unrecognized_keys（.strict() 白名单外）：zod v4 issue 携带 keys[] → 取首键；
+ * - 其余：取首 issue 的首 path 段（与 cursor/reason 路径 {field} 既有形态对齐）。
+ */
+export function validationFieldOf(error: ZodError): string | undefined {
+  const issue = error.issues[0];
+  if (issue === undefined) return undefined;
+  if (issue.code === 'unrecognized_keys') {
+    const keys = (issue as { keys?: readonly string[] }).keys;
+    return keys?.[0];
+  }
+  const first = issue.path[0];
+  return first === undefined ? undefined : String(first);
+}
+
 @Injectable()
 export class ZodValidationPipe<T> implements PipeTransform<unknown, T> {
   constructor(private readonly schema: z.ZodType<T>) {}

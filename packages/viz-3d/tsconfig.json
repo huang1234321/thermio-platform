@@ -1,0 +1,4 @@
+{
+  "extends": "@thermio/tsconfig/react-library.json",
+  "include": ["src"]
+}

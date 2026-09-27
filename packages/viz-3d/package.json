@@ -1,0 +1,42 @@
+{
+  "name": "@thermio/viz-3d",
+  "version": "0.0.0",
+  "description": "thermio 3D 组态渲染引擎包（ADR-013 / ui-viz-3d：GLB+Draco+Three.js 命令式引擎 + 薄 React 封装）",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./assets/draco/*": "./assets/draco/*"
+  },
+  "files": [
+    "dist",
+    "assets"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "0.186.1",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "react": "^18.3.1 || ^19.0.0"
+  },
+  "devDependencies": {
+    "@thermio/eslint-config": "workspace:*",
+    "@thermio/tsconfig": "workspace:*",
+    "@types/react": "^18.3.18",
+    "@types/three": "0.186.0",
+    "eslint": "catalog:",
+    "react": "^18.3.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "jsdom": "^26.1.0"
+  }
+}

@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "build": "tsc -p tsconfig.build.json",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },
@@ -11,6 +12,18 @@
     "@thermio/eslint-config": "workspace:*",
     "@thermio/tsconfig": "workspace:*",
     "eslint": "catalog:",
-    "typescript": "catalog:"
-  }
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ]
 }

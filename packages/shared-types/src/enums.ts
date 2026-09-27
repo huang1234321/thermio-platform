@@ -82,6 +82,16 @@ export const USER_STATUSES = ['active', 'disabled'] as const;
 export const UserStatusSchema = z.enum(USER_STATUSES);
 export type UserStatus = z.infer<typeof UserStatusSchema>;
 
+/** FDD 发现状态（ddl.md §9.2 fdd_finding.status CHECK 封闭集；IMPL-17 并入项注册）。 */
+export const FDD_FINDING_STATUSES = ['open', 'resolved', 'ignored'] as const;
+export const FddFindingStatusSchema = z.enum(FDD_FINDING_STATUSES);
+export type FddFindingStatus = (typeof FDD_FINDING_STATUSES)[number];
+
+/** FDD 报告期型（ddl.md §9.2 fdd_report.period_type CHECK；IMPL-17 并入项注册）。 */
+export const FDD_REPORT_PERIOD_TYPES = ['day', 'week'] as const;
+export const FddReportPeriodTypeSchema = z.enum(FDD_REPORT_PERIOD_TYPES);
+export type FddReportPeriodType = (typeof FDD_REPORT_PERIOD_TYPES)[number];
+
 /** 提案状态机（DATA-MODEL §3.5 proposal.status）。 */
 export const PROPOSAL_STATUSES = [
   'pending',

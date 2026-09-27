@@ -3,7 +3,10 @@
 #   用例 2：api 角色跨租户读写隔离（WITH CHECK 挡跨租户写入）
 #   用例 3：未设 app.tenant_id 时 api 角色零可见（fail-closed）
 #   用例 4：ingest 角色仅可 SELECT point/gateway，其余拒绝
-#   用例 5：auth 角色仅可 SELECT device_credential/gateway，其余拒绝
+#   用例 5：auth 角色旁路 = 枚举的 internal_read 只读表集（面收窄纪律），其余拒绝。
+#             枚举集随 /internal/* 面扩列（DAT-163/IMPL-17，迁移 0007/0008）：
+#             0001 device_credential/gateway + 0005 app_user + 0007 tenant/equipment
+#             + 0008 building/point/hvac_system；业务表（proposal/fdd/告警/会话）仍拒绝。
 #   用例 6：owner（FORCE RLS 无策略）业务表零可见
 # 前置：目标库已完成 bootstrap + goose up；本脚本经 superuser 连接（SET ROLE 切换被测角色），
 #       角色策略按 current_user 生效，等价于真实登录连接。
@@ -33,6 +36,19 @@ expect_count() {
     PASS=$((PASS + 1))
   else
     echo "FAIL: $desc — 期望 count=$expected，实际 count=$got"
+    FAIL=$((FAIL + 1))
+  fi
+}
+
+# 期望 sql 可执行（可读性探针：行数随夹具变化，只断言无权限错误）
+expect_readable() {
+  local desc="$1" sql="$2" err
+  err=$(psql -X -q -tAc "$sql" 2>&1)
+  if [ $? -eq 0 ]; then
+    echo "PASS: $desc"
+    PASS=$((PASS + 1))
+  else
+    echo "FAIL: $desc — 期望可读，实际: $(echo "$err" | tail -1)"
     FAIL=$((FAIL + 1))
   fi
 }
@@ -108,11 +124,15 @@ expect_error "ingest 读 device_credential 拒绝" "permission denied" \
 expect_error "ingest UPDATE point 拒绝" "permission denied" \
   "SET ROLE thermio_ingest; UPDATE point SET status = 'disabled';"
 
-echo "== 用例 5：auth 角色仅 device_credential/gateway 只读 =="
-expect_count "auth 可 SELECT gateway" 0 \
-  "SET ROLE thermio_auth; SELECT count(*) FROM gateway;"
-expect_error "auth 读 point 拒绝" "permission denied" \
-  "SET ROLE thermio_auth; SELECT count(*) FROM point;"
+echo "== 用例 5：auth 角色旁路 = 枚举 internal_read 只读集（0001/0005/0007/0008），业务表拒绝 =="
+for t in gateway device_credential app_user tenant equipment building point hvac_system; do
+  expect_readable "auth 可 SELECT $t（internal_read 枚举集）" \
+    "SET ROLE thermio_auth; SELECT count(*) FROM $t;"
+done
+for t in proposal fdd_finding fdd_report alarm_event control_audit auth_session password_reset_token; do
+  expect_error "auth 读 $t 拒绝（旁路面未失控）" "permission denied" \
+    "SET ROLE thermio_auth; SELECT count(*) FROM $t;"
+done
 
 echo "== 用例 6：owner（FORCE RLS 无策略）零可见 =="
 expect_count "owner 业务表零可见" 0 \

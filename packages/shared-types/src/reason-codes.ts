@@ -56,22 +56,12 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * - auth.unauthenticated / auth.refresh_revoked：M7 草案（UNAUTHENTICATED / REFRESH_REVOKED）；
  * - user.password_policy_failed / user.not_found / user.email_duplicate / user.scope_building_mismatch；
  * - role.unknown：M7 草案（ROLE_UNKNOWN）。
- *
- * 四批注册（IMPL-11 / DAT-114，资产与接入管理，modules M1-asset.md §1.2 落码值逐字）：
- * - common.conflict：point If-Match 弱校验失配（R4，409）；
- * - 枚举治理三码 asset.building_type_unknown / asset.system_type_unknown /
- *   asset.equipment_type_unknown + point.quantity_type_unknown（422，值域外拒绝路径）；
- * - asset.local_id_duplicate（同系统 local_id 重复，409，R3——DDL 无唯一索引，应用层校验）；
- * - point.field_not_allowed（语义 PATCH 白名单外字段，400——schema 合法但违反端点策略）；
- * - 接入域三码 gateway.not_found / gateway.serial_duplicate / credential.not_found /
- *   credential.limit_exceeded（R6：platform 种子未覆盖接入域）。
  */
 export const REASON_CODES = [
   'common.validation_failed',
   'common.internal_error',
   'common.not_found',
   'common.rate_limited',
-  'common.conflict',
   'auth.invalid_credentials',
   'auth.token_expired',
   'auth.unauthenticated',
@@ -85,16 +75,6 @@ export const REASON_CODES = [
   'role.unknown',
   'asset.not_found',
   'asset.duplicate_raw_name',
-  'asset.building_type_unknown',
-  'asset.system_type_unknown',
-  'asset.equipment_type_unknown',
-  'asset.local_id_duplicate',
-  'point.quantity_type_unknown',
-  'point.field_not_allowed',
-  'gateway.not_found',
-  'gateway.serial_duplicate',
-  'credential.not_found',
-  'credential.limit_exceeded',
   'point.not_controllable',
   'point.write_not_numeric',
   ...PROPOSAL_GATE_REASON_CODES,
@@ -144,11 +124,6 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'common',
     http: 429,
     description: '命中限速（platform.md §12 骨架码；登录防爆破，SEC-PW-04）',
-  },
-  'common.conflict': {
-    domain: 'common',
-    http: 409,
-    description: '乐观并发失配（point If-Match 弱校验，锚 updated_at；M1-asset §1.2 增量〔R4〕）',
   },
   'auth.invalid_credentials': {
     domain: 'auth',
@@ -215,58 +190,6 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'asset',
     http: 409,
     description: '资产域原始名重复（唯一性冲突）',
-  },
-  'asset.building_type_unknown': {
-    domain: 'asset',
-    http: 422,
-    description: 'building_type 不在 BUILDING_TYPES 清单（M1-asset §1.2 增量）',
-  },
-  'asset.system_type_unknown': {
-    domain: 'asset',
-    http: 422,
-    description: 'system_type 不在 SYSTEM_TYPES 清单（枚举治理拒绝路径）',
-  },
-  'asset.equipment_type_unknown': {
-    domain: 'asset',
-    http: 422,
-    description: 'equipment_type 不在 EQUIPMENT_TYPES 清单（枚举治理拒绝路径）',
-  },
-  'asset.local_id_duplicate': {
-    domain: 'asset',
-    http: 409,
-    description: '同系统内设备 local_id 重复（EQUIPMENT_LOCAL_ID_DUPLICATE 映射；应用层校验，R3）',
-  },
-  'point.quantity_type_unknown': {
-    domain: 'point',
-    http: 422,
-    description: 'quantity_type 不在 QUANTITY_TYPES 清单（枚举治理拒绝路径）',
-  },
-  'point.field_not_allowed': {
-    domain: 'point',
-    http: 400,
-    description:
-      '语义 PATCH 提交白名单外字段（闸门字段走 M8、物理层字段走 §3.10、status 走 §3.6 专用端点；400 而非 422：schema 合法但违反端点策略）',
-  },
-  'gateway.not_found': {
-    domain: 'gateway',
-    http: 404,
-    description: '网关不存在或越权（接入域；越界与不存在同响应，SEC-AZ-03，M1-asset R6）',
-  },
-  'gateway.serial_duplicate': {
-    domain: 'gateway',
-    http: 409,
-    description:
-      '网关 serial 全局重复（跨租户 UNIQUE；details 仅含 serial 本身，不泄露对方租户信息）',
-  },
-  'credential.not_found': {
-    domain: 'credential',
-    http: 404,
-    description: '凭证不存在或越权（CREDENTIAL_NOT_FOUND 映射，SEC-AZ-03）',
-  },
-  'credential.limit_exceeded': {
-    domain: 'credential',
-    http: 409,
-    description: '每网关活跃凭证超上限（CREDENTIAL_LIMIT_EXCEEDED 映射；上限 2，M1-asset §4）',
   },
   'point.not_controllable': {
     domain: 'point',
@@ -387,9 +310,7 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   SYSTEM_NOT_FOUND: 'asset.not_found',
   POINT_NOT_FOUND: 'asset.not_found',
   // ── 通用表其余（overview §2；无业务域归属 → common.*，规式第 3 条）草案码 ──
-  // CONFLICT 目标随 IMPL-11 注册为 common.conflict（M1-asset §1.2/§1.3 落码值；
-  // 仅 point If-Match 场景承载——R4 承载限定）。
-  CONFLICT: 'common.conflict',
+  CONFLICT: 'common.version_conflict', // 乐观并发冲突（版本不符，409）；宁具体勿泛化取 version_conflict
   RATE_LIMITED: 'common.rate_limited', // platform.md §6 明示骨架码原字；IMPL-10 注册入种子表
   // ── 闸门 → 种子码（执行结果侧展示码，overview M5；与 §5.2 逐条对照）──
   PROPOSAL_GATE_WHITELIST_DENIED: 'proposal.gate_not_whitelisted',
@@ -421,11 +342,9 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   CREDENTIAL_NOT_FOUND: 'credential.not_found',
   CREDENTIAL_LIMIT_EXCEEDED: 'credential.limit_exceeded',
   // ── 枚举取值未知（M1 校验类；details 指明字段）草案码 ──
-  // M1 三码目标随 IMPL-11 注册入种子表（M1-asset §1.3 落码值：枚举域归资产/点位域，
-  // 规式第 4 条「跨实体资源类 → asset.*」优先于旧草案的独立小域名）。
-  SYSTEM_TYPE_UNKNOWN: 'asset.system_type_unknown',
-  EQUIPMENT_TYPE_UNKNOWN: 'asset.equipment_type_unknown',
-  QUANTITY_TYPE_UNKNOWN: 'point.quantity_type_unknown',
+  SYSTEM_TYPE_UNKNOWN: 'system_type.unknown',
+  EQUIPMENT_TYPE_UNKNOWN: 'equipment_type.unknown',
+  QUANTITY_TYPE_UNKNOWN: 'quantity_type.unknown',
   ROLE_UNKNOWN: 'role.unknown',
   // ── 点位域（M1/M3/M8）草案码 ──
   POINT_NO_DATA: 'point.no_data',

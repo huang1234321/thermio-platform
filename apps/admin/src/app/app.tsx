@@ -12,12 +12,6 @@ import { useAuth, useCapabilities } from './auth-context.js';
 import { AppLayout } from '../pages/app-layout.js';
 import { LoginPage } from '../pages/login-page.js';
 import { ModulePlaceholderPage, NotFoundPage, ForbiddenPage } from '../pages/status-pages.js';
-import { AssetsOverviewPage } from '../pages/asset/assets-overview.js';
-import { BuildingDetailPage } from '../pages/asset/building-detail.js';
-import { SystemDetailPage } from '../pages/asset/system-detail.js';
-import { EquipmentDetailPage } from '../pages/asset/equipment-detail.js';
-import { PointDetailPage } from '../pages/asset/point-detail.js';
-import { GatewayDetailPage } from '../pages/asset/gateway-detail.js';
 import { SettingsMePage } from '../pages/settings-me.js';
 import { SettingsRolesPage } from '../pages/settings-roles.js';
 import { SettingsUsersPage } from '../pages/settings-users.js';
@@ -55,6 +49,7 @@ const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
   { path: '/alarms', title: '告警中心（M4）' },
   { path: '/proposals', title: '控制建议（M5）' },
   { path: '/fdd', title: 'FDD 报告（M6）' },
+  { path: '/assets', title: '资产管理（M1）' },
   { path: '/imports', title: '点表导入（M2）' },
   { path: '/control/points', title: '控制安全（M8）' },
 ];
@@ -74,15 +69,6 @@ export function App(): ReactNode {
                 element={<ModulePlaceholderPage title={route.title} />}
               />
             ))}
-            {/* 资产组（M1-asset §7：6 页路由 + 能力显隐） */}
-            <Route element={<RequireCapability capability="assets.read" />}>
-              <Route path="/assets" element={<AssetsOverviewPage />} />
-              <Route path="/assets/buildings/:buildingId" element={<BuildingDetailPage />} />
-              <Route path="/assets/systems/:systemId" element={<SystemDetailPage />} />
-              <Route path="/assets/equipments/:equipmentId" element={<EquipmentDetailPage />} />
-              <Route path="/assets/points/:pointId" element={<PointDetailPage />} />
-              <Route path="/assets/gateways/:gatewayId" element={<GatewayDetailPage />} />
-            </Route>
             <Route path="/settings/me" element={<SettingsMePage />} />
             <Route path="/settings/roles" element={<SettingsRolesPage />} />
             <Route element={<RequireCapability capability="users.manage" />}>

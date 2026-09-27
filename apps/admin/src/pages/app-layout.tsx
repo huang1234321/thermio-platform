@@ -7,7 +7,7 @@
 import { ConfigProvider, Layout, Menu, theme } from 'antd';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth, useCapabilities } from '../app/auth-context.js';
-import { visibleMenuEntries } from '../app/menu-model.js';
+import { selectedMenuKeys, visibleMenuEntries } from '../app/menu-model.js';
 import { AlarmBadge } from './alarm/alarm-badge.js';
 
 const THERMIO_PRIMARY = '#0B7285'; // --ti-primary（浅色档）
@@ -62,7 +62,7 @@ export function AppLayout(): React.ReactNode {
           <Layout.Sider width={224} theme="light">
             <Menu
               mode="inline"
-              selectedKeys={[location.pathname]}
+              selectedKeys={selectedMenuKeys(location.pathname, entries)}
               items={entries.map((entry) => ({ key: entry.route, label: entry.label }))}
               onClick={({ key }) => {
                 void navigate(key);

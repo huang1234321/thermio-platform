@@ -79,6 +79,8 @@ export async function doRefresh(): Promise<LoginResponse> {
 export interface ApiCallOptions {
   readonly method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   readonly body?: unknown;
+  /** 附加请求头（Idempotency-Key 等，API-DSN-01；M5 approve/reject 必带）。 */
+  readonly headers?: Record<string, string>;
   /** 内部重放标记（自动刷新一次，不无限递归）。 */
   readonly retried?: boolean;
 }
@@ -96,6 +98,7 @@ export async function apiFetch<TSchema>(
       ...(tokenStore.accessToken !== null
         ? { authorization: `Bearer ${tokenStore.accessToken}` }
         : {}),
+      ...(options.headers ?? {}),
     },
   };
   if (options.body !== undefined) {

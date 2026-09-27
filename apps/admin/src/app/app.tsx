@@ -20,6 +20,10 @@ import { PointDetailPage } from '../pages/asset/point-detail.js';
 import { GatewayDetailPage } from '../pages/asset/gateway-detail.js';
 import { SettingsMePage } from '../pages/settings-me.js';
 import { AlarmsPage } from '../pages/alarm/alarms-page.js';
+import { ProposalsPage } from '../pages/proposal/proposals-page.js';
+import { ProposalDetailPage } from '../pages/proposal/proposal-detail-page.js';
+import { ProposalExecutionPage } from '../pages/proposal/proposal-execution-page.js';
+import { ControlAuditPage } from '../pages/proposal/control-audit-page.js';
 import { AlarmDetailPage } from '../pages/alarm/alarm-detail-page.js';
 import { AlarmRulesPage } from '../pages/alarm/alarm-rules-page.js';
 import { AlarmSuppressionsPage } from '../pages/alarm/alarm-suppressions-page.js';
@@ -58,7 +62,6 @@ function RequireCapability({ capability }: { capability: Capability }): ReactNod
 }
 
 const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
-  { path: '/proposals', title: '控制建议（M5）' },
   { path: '/fdd', title: 'FDD 报告（M6）' },
   { path: '/imports', title: '点表导入（M2）' },
   { path: '/control/points', title: '控制安全（M8）' },
@@ -94,6 +97,13 @@ export function App(): ReactNode {
                 path="/monitor/equipments/:equipmentId"
                 element={<EquipmentConditionDetailPage />}
               />
+            </Route>
+            {/* 建议组（M5-proposal §6：4 页路由，能力 proposals.read） */}
+            <Route element={<RequireCapability capability="proposals.read" />}>
+              <Route path="/proposals" element={<ProposalsPage />} />
+              <Route path="/proposals/:proposalId" element={<ProposalDetailPage />} />
+              <Route path="/proposals/:proposalId/execution" element={<ProposalExecutionPage />} />
+              <Route path="/control-audit" element={<ControlAuditPage />} />
             </Route>
             {/* 资产组（M1-asset §7：6 页路由 + 能力显隐） */}
             <Route element={<RequireCapability capability="assets.read" />}>

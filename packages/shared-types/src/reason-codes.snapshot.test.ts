@@ -130,6 +130,12 @@ describe('reason_code registry snapshot', () => {
         "point.write_not_numeric": {
           "http": 422,
         },
+        "proposal.client_ref_duplicate": {
+          "http": 409,
+        },
+        "proposal.expired": {
+          "http": 409,
+        },
         "proposal.gate_circuit_open": {
           "gate": "gate_circuit_open",
           "http": 503,
@@ -149,6 +155,18 @@ describe('reason_code registry snapshot', () => {
         "proposal.gate_rate_limited": {
           "gate": "gate_rate_limited",
           "http": 429,
+        },
+        "proposal.not_found": {
+          "http": 404,
+        },
+        "proposal.payload_invalid": {
+          "http": 422,
+        },
+        "proposal.reason_required": {
+          "http": 422,
+        },
+        "proposal.state_invalid": {
+          "http": 409,
         },
         "role.unknown": {
           "http": 422,

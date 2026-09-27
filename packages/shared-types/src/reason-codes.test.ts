@@ -35,7 +35,9 @@ describe('reason_code registry', () => {
     //   rule_type_unknown / severity_unknown / rule_in_use）。
     // + IMPL-14 三码（DAT-117，M3-monitor.md §1.2：stream.limit_exceeded /
     //   point.not_found / stream.server_busy）。
-    expect(REASON_CODES).toHaveLength(52);
+    // + IMPL-17 六码（DAT-163，M5-proposal.md §1.2：proposal.not_found / state_invalid /
+    //   expired / payload_invalid / reason_required / client_ref_duplicate〔R2 占位〕）。
+    expect(REASON_CODES).toHaveLength(58);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

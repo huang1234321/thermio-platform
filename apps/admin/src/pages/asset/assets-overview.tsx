@@ -27,7 +27,12 @@ import {
   type Building,
 } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
-import { errorText, useHasCapability } from './asset-shared.js';
+import {
+  BUILDING_TYPE_LABEL,
+  buildingTypeLabel,
+  errorText,
+  useHasCapability,
+} from './asset-shared.js';
 
 export function AssetsOverviewPage(): React.ReactNode {
   const canWrite = useHasCapability('assets.write');
@@ -130,7 +135,7 @@ export function AssetsOverviewPage(): React.ReactNode {
                 )
               }
             >
-              <p>类型：{building.building_type ?? '—'}</p>
+              <p>类型：{buildingTypeLabel(building.building_type)}</p>
               <p>地址：{building.address ?? '—'}</p>
               <p>
                 建筑面积：
@@ -169,7 +174,13 @@ export function AssetsOverviewPage(): React.ReactNode {
             <Input maxLength={256} />
           </Form.Item>
           <Form.Item name="building_type" label="楼宇类型">
-            <Select allowClear options={BUILDING_TYPES.map((value) => ({ value, label: value }))} />
+            <Select
+              allowClear
+              options={BUILDING_TYPES.map((value) => ({
+                value,
+                label: BUILDING_TYPE_LABEL[value],
+              }))}
+            />
           </Form.Item>
           <Form.Item name="gross_area_m2" label="建筑面积（m²）">
             <Input type="number" />

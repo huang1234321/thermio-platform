@@ -38,7 +38,7 @@ import {
   type HvacSystem,
 } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
-import { errorText, useHasCapability } from './asset-shared.js';
+import { buildingTypeLabel, errorText, useHasCapability } from './asset-shared.js';
 
 function relativeTime(iso: string | null): string {
   if (iso === null) return '从未上线';
@@ -146,7 +146,9 @@ export function BuildingDetailPage(): React.ReactNode {
     <Space direction="vertical" size="large" style={{ width: '100%' }}>
       <Typography.Title level={3} style={{ margin: 0 }}>
         {building.name}
-        <Tag style={{ marginLeft: 12 }}>{building.building_type ?? '未分类'}</Tag>
+        <Tag style={{ marginLeft: 12 }}>
+          {building.building_type === null ? '未分类' : buildingTypeLabel(building.building_type)}
+        </Tag>
       </Typography.Title>
       {error !== null && <Alert type="error" showIcon message={error} />}
 

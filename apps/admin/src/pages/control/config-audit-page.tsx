@@ -3,8 +3,10 @@
  *
  * - 四筛选项（PRD D3「谁/何时/改了什么/为什么」检索口径）：点位 / 字段（CHECK
  *   封闭集五值）/ 操作者类型（human|system）/ 时间区间；
- * - 六列：时间（绝对时间——审计语境）/ 点位 / 字段（中英并陈）/ 变更（old→new）/
- *   操作者（human=用户名 / system 徽标）/ 原因；
+ * - 六列：时间 / 点位 / 字段（中英并陈）/ 变更（old→new）/ 操作者（human=用户名 /
+ *   system 徽标）/ 原因；工具栏「已加载 N 条」计数（§3.1，DAT-157 修单——与可控点
+ *   清单对齐）；时间列改相对时间 + hover 完整时间戳（§2.2，DAT-157 验收裁决覆盖
+ *   M8 §6「审计语境绝对时间」原口径，审计可追溯性由 hover 完整时间戳承载）；
  * - 双轨边界（flows §6）：本页只检索 config_audit；值写审计在 M5 /control-audit
  *   ——页头固定互链说明条。
  */
@@ -25,6 +27,7 @@ import { useSearchParams } from 'react-router-dom';
 import { ConfigAuditListResponseSchema, type ConfigAuditItem } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
 import { errorText } from '../asset/asset-shared.js';
+import { RelativeTime } from '../relative-time.js';
 
 const FIELD_LABEL: Record<ConfigAuditItem['field'], string> = {
   control_mode: '控制模式 control_mode',
@@ -46,6 +49,7 @@ export function ConfigAuditPage(): React.ReactNode {
   const [searchParams] = useSearchParams();
   const [rows, setRows] = useState<readonly ConfigAuditItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pointId, setPointId] = useState(searchParams.get('point_id') ?? '');
@@ -73,6 +77,9 @@ export function ConfigAuditPage(): React.ReactNode {
         );
         setRows((prev) =>
           nextCursor === undefined ? response.items : [...prev, ...response.items],
+        );
+        setTotal((prev) =>
+          nextCursor === undefined ? response.items.length : (prev ?? 0) + response.items.length,
         );
         setCursor(response.next_cursor);
       } catch (cause) {
@@ -142,6 +149,9 @@ export function ConfigAuditPage(): React.ReactNode {
           >
             检索
           </Button>
+          {total !== null && (
+            <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
+          )}
         </Space>
       </Card>
 
@@ -160,11 +170,7 @@ export function ConfigAuditPage(): React.ReactNode {
               title: '时间',
               dataIndex: 'at',
               width: 200,
-              render: (at: string) => (
-                <Typography.Text style={{ fontSize: 12 }}>
-                  {at.replace('T', ' ').slice(0, 19)}
-                </Typography.Text>
-              ),
+              render: (at: string) => <RelativeTime iso={at} />,
             },
             {
               title: '点位',

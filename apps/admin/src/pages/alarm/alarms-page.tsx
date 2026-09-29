@@ -3,7 +3,9 @@
  *
  * - 折叠视图：根行「+N 子告警」角标，展开走 root_group_id 参数（§3.1）；
  * - 批量 ack 仅作用勾选可见行（含展开子行），207 逐项结果汇总 toast + 失败行内联标红；
- * - 筛选栏：状态/严重度/类别；能力显隐 ack/close=alarms.ack，suppress=alarms.suppress。
+ * - 游标分页「加载更多 + 已加载计数」（§3.1，照齐可控点清单示范）；
+ * - 列表时间相对显示（§2.2，hover 完整时间戳）；能力显隐 ack/close=alarms.ack，
+ *   suppress=alarms.suppress。
  */
 import { Alert, Button, Card, Popconfirm, Select, Space, Table, Typography, message } from 'antd';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -18,7 +20,8 @@ import {
 } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
 import { errorText } from '../asset/asset-shared.js';
-import { SeverityTag, StatusTag, formatTime, useHasCapability } from './alarm-shared.js';
+import { RelativeTime } from '../relative-time.js';
+import { SeverityTag, StatusTag, useHasCapability } from './alarm-shared.js';
 import { CloseAlarmModal, SuppressModal, ackAlarm, unsuppressAlarm } from './alarm-actions.js';
 
 const STATUS_OPTIONS = ALARM_EVENT_STATUSES.map((value) => ({ value, label: value }));
@@ -34,6 +37,8 @@ export function AlarmsPage(): React.ReactNode {
   const canSuppress = useHasCapability('alarms.suppress');
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<readonly AlarmRow[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<readonly string[]>([]);
@@ -42,26 +47,33 @@ export function AlarmsPage(): React.ReactNode {
   const [suppressTarget, setSuppressTarget] = useState<AlarmEventView | null>(null);
   const expandedGroup = searchParams.get('root_group_id');
 
-  const load = useCallback(async (): Promise<void> => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = new URLSearchParams({ limit: '50' });
-      const status = searchParams.get('status');
-      const severity = searchParams.get('severity');
-      const category = searchParams.get('category');
-      if (status !== null) params.set('status', status);
-      if (severity !== null) params.set('severity', severity);
-      if (category !== null) params.set('category', category);
-      if (expandedGroup !== null) params.set('root_group_id', expandedGroup);
-      const result = await apiFetch(`/alarms?${params.toString()}`, AlarmListResponseSchema);
-      setRows(result.items.map((item) => ({ ...item, key: String(item.id) })));
-    } catch (cause) {
-      setError(errorText(cause, '告警列表加载失败'));
-    } finally {
-      setLoading(false);
-    }
-  }, [searchParams, expandedGroup]);
+  const load = useCallback(
+    async (nextCursor?: string): Promise<void> => {
+      setLoading(true);
+      setError(null);
+      try {
+        const params = new URLSearchParams({ limit: '50' });
+        const status = searchParams.get('status');
+        const severity = searchParams.get('severity');
+        const category = searchParams.get('category');
+        if (status !== null) params.set('status', status);
+        if (severity !== null) params.set('severity', severity);
+        if (category !== null) params.set('category', category);
+        if (expandedGroup !== null) params.set('root_group_id', expandedGroup);
+        if (nextCursor !== undefined && nextCursor.length > 0) params.set('cursor', nextCursor);
+        const result = await apiFetch(`/alarms?${params.toString()}`, AlarmListResponseSchema);
+        const page = result.items.map((item) => ({ ...item, key: String(item.id) }));
+        setRows((prev) => (nextCursor === undefined ? page : [...prev, ...page]));
+        setTotal((prev) => (nextCursor === undefined ? page.length : (prev ?? 0) + page.length));
+        setCursor(result.next_cursor);
+      } catch (cause) {
+        setError(errorText(cause, '告警列表加载失败'));
+      } finally {
+        setLoading(false);
+      }
+    },
+    [searchParams, expandedGroup],
+  );
 
   useEffect(() => {
     void load();
@@ -126,7 +138,7 @@ export function AlarmsPage(): React.ReactNode {
         title: '开启时间',
         dataIndex: 'opened_at',
         width: 170,
-        render: (value: string): React.ReactNode => formatTime(value),
+        render: (value: string): React.ReactNode => <RelativeTime iso={value} />,
       },
       {
         title: '操作',
@@ -139,7 +151,7 @@ export function AlarmsPage(): React.ReactNode {
                 size="small"
                 onClick={() =>
                   void ackAlarm(row.id)
-                    .then(load)
+                    .then(() => load())
                     .catch((cause: unknown) => message.error(errorText(cause, '确认失败')))
                 }
               >
@@ -173,7 +185,7 @@ export function AlarmsPage(): React.ReactNode {
                 title="提前恢复该抑制？"
                 onConfirm={() =>
                   void unsuppressAlarm(row.id, row.is_root)
-                    .then(load)
+                    .then(() => load())
                     .catch((cause: unknown) => message.error(errorText(cause, '恢复失败')))
                 }
               >
@@ -245,6 +257,9 @@ export function AlarmsPage(): React.ReactNode {
             setSearchParams((prev) => setParam(prev, 'category', value));
           }}
         />
+        {total !== null && (
+          <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
+        )}
       </Space>
       {error !== null && (
         <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />
@@ -254,7 +269,7 @@ export function AlarmsPage(): React.ReactNode {
         loading={loading}
         columns={columns}
         dataSource={[...rows]}
-        pagination={{ pageSize: 50, showSizeChanger: false }}
+        pagination={false}
         {...(canAck
           ? {
               rowSelection: {
@@ -282,6 +297,18 @@ export function AlarmsPage(): React.ReactNode {
           },
         })}
       />
+      {cursor !== null && (
+        <Button
+          block
+          style={{ marginTop: 12 }}
+          onClick={() => {
+            void load(cursor);
+          }}
+          loading={loading}
+        >
+          加载更多
+        </Button>
+      )}
       <CloseAlarmModal
         alarm={closeTarget}
         onClose={() => {

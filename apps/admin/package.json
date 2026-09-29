@@ -16,6 +16,7 @@
     "@thermio/shared-types": "workspace:*",
     "@thermio/viz-3d": "workspace:*",
     "antd": "^5.27.3",
+    "dayjs": "^1.11.23",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.9.4",

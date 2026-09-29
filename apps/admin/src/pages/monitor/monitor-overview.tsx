@@ -52,10 +52,10 @@ const POLL_MS = 60_000;
 const STALE_TIMEOUT_S = 30;
 
 const RUN_STATE_META = {
-  running: { label: '运行', color: '#52c41a' },
-  standby: { label: '备用', color: '#8c8c8c' },
-  fault: { label: '故障', color: '#cf1322' },
-  unknown: { label: '未知', color: '#d9d9d9' },
+  running: { label: '运行', color: 'var(--ti-ok)' },
+  standby: { label: '备用', color: 'var(--ti-text-3)' },
+  fault: { label: '故障', color: 'var(--ti-sev-critical)' },
+  unknown: { label: '未知', color: 'var(--ti-text-3)' },
 } as const;
 
 const STREAM_LABEL = {
@@ -373,7 +373,7 @@ export function MonitorOverviewPage(): ReactNode {
               return (
                 <div
                   style={{
-                    background: 'rgba(16,28,38,0.82)',
+                    background: 'var(--ti-scene-overlay)',
                     color: '#fff',
                     borderRadius: 4,
                     padding: '2px 8px',
@@ -413,7 +413,7 @@ export function MonitorOverviewPage(): ReactNode {
               inset: 0,
               display: 'grid',
               placeItems: 'center',
-              background: '#101c26',
+              background: 'var(--ti-scene-backdrop)',
             }}
           >
             <div style={{ textAlign: 'center', color: '#fff' }}>
@@ -430,7 +430,7 @@ export function MonitorOverviewPage(): ReactNode {
               inset: 0,
               display: 'grid',
               placeItems: 'center',
-              background: '#101c26',
+              background: 'var(--ti-scene-backdrop)',
             }}
           >
             <div style={{ textAlign: 'center', color: '#fff', maxWidth: 420 }}>
@@ -797,11 +797,11 @@ export function MonitorOverviewPage(): ReactNode {
                     display: 'flex',
                     justifyContent: 'space-between',
                     padding: '6px 8px',
-                    borderBottom: '1px solid #f0f0f0',
+                    borderBottom: '1px solid var(--ti-border)',
                   }}
                 >
                   <span>{slot}</span>
-                  <span style={{ color: value.stale ? '#bfbfbf' : undefined }}>
+                  <span style={{ color: value.stale ? 'var(--ti-text-3)' : undefined }}>
                     {value.unknown ? '—' : (value.text ?? '—')}
                     {value.unit !== null ? ` ${value.unit}` : ''}
                     {value.stale ? '（超时）' : ''}

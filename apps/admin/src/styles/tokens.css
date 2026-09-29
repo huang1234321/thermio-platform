@@ -1,0 +1,70 @@
+/**
+ * 设计 token 双套（ui/baseline.md §2.1，FE-02：--ti-* 命名空间，data-theme 驱动）。
+ *
+ * 与基线表的 AA 偏差（本卡 DAT-169 实测核定，正文色 4.5:1 / 图形 3:1）：
+ * - --ti-text-3：#8A9099→#646C76（浅，3.22→5.32）、#6B7280→#8B939C（深，3.43→5.32）；
+ * - --ti-sev-warning 浅档：#AD6800→#9A5C00（白底 4.41→5.38，语义浅底亦 ≥4.5）；
+ * - 深色图表序列按「同序列提亮 20%」换算：#3C8E9D #5976EF #BD8633 #8E58DA #A1A6AD。
+ * 增补 token（基线表外）：--ti-border-strong（控件描边）、--ti-scene-backdrop/--ti-scene-overlay
+ * （3D 视口底/悬浮层，两主题同值——数字孪生视口恒为深底）。
+ */
+
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --ti-primary: #0b7285;
+  --ti-primary-hover: #095e6f;
+  --ti-primary-bg: #e6f3f5;
+  --ti-bg-page: #f5f6f8;
+  --ti-bg-card: #ffffff;
+  --ti-border: #e4e7eb;
+  --ti-border-strong: #d3d8de;
+  --ti-text: #1f2329;
+  --ti-text-2: #51565e;
+  --ti-text-3: #646c76;
+  --ti-sev-critical: #cf1322;
+  --ti-sev-warning: #9a5c00;
+  --ti-sev-info: #1668dc;
+  --ti-ok: #237804;
+  --ti-chart-1: #0b7285;
+  --ti-chart-2: #2f54eb;
+  --ti-chart-3: #ad6800;
+  --ti-chart-4: #722ed1;
+  --ti-chart-5: #8a9099;
+  --ti-scene-backdrop: #101c26;
+  --ti-scene-overlay: rgba(16, 28, 38, 0.82);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --ti-primary: #54c7d8;
+  --ti-primary-hover: #7ad6e3;
+  --ti-primary-bg: #12333a;
+  --ti-bg-page: #121417;
+  --ti-bg-card: #1b1f24;
+  --ti-border: #2c3238;
+  --ti-border-strong: #3a4148;
+  --ti-text: #e8eaed;
+  --ti-text-2: #9aa1a9;
+  --ti-text-3: #8b939c;
+  --ti-sev-critical: #ff7875;
+  --ti-sev-warning: #ffc53d;
+  --ti-sev-info: #69b1ff;
+  --ti-ok: #95de64;
+  --ti-chart-1: #3c8e9d;
+  --ti-chart-2: #5976ef;
+  --ti-chart-3: #bd8633;
+  --ti-chart-4: #8e58da;
+  --ti-chart-5: #a1a6ad;
+  --ti-scene-backdrop: #101c26;
+  --ti-scene-overlay: rgba(16, 28, 38, 0.82);
+}
+
+/* 主题基底：页面底/正文色随 token（深色下body不再露白） */
+body {
+  margin: 0;
+  background: var(--ti-bg-page);
+  color: var(--ti-text);
+  font-family: -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

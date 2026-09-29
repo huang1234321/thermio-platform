@@ -4,6 +4,25 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>thermio 管理台</title>
+    <script>
+      // 首屏主题预设（DAT-169/FE-02）：持久化选择 → 系统偏好 → 浅色；仅模式，无色值。
+      // 键 thermio.theme 与 src/app/theme.tsx 的 THEME_STORAGE_KEY 共用，改动须两侧同步。
+      (function () {
+        try {
+          var mode = localStorage.getItem('thermio.theme');
+          if (mode !== 'light' && mode !== 'dark') {
+            mode =
+              window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          }
+          document.documentElement.dataset.theme = mode;
+          document.documentElement.style.colorScheme = mode;
+        } catch (e) {
+          /* 无存储/无 matchMedia：保持默认浅色（tokens.css :root 档） */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

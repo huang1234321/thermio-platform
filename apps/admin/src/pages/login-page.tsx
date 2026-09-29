@@ -54,7 +54,7 @@ export function LoginPage(): React.ReactNode {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#F5F6F8',
+        background: 'var(--ti-bg-page)',
       }}
     >
       <Card title="thermio 节能管理" style={{ width: 360 }}>

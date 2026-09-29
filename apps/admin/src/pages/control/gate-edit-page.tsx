@@ -262,7 +262,9 @@ export function GateEditPage(): React.ReactNode {
               <tbody>
                 {diff.map((row) => (
                   <tr key={row.label}>
-                    <td style={{ padding: '4px 12px 4px 0', color: '#888' }}>{row.label}</td>
+                    <td style={{ padding: '4px 12px 4px 0', color: 'var(--ti-text-2)' }}>
+                      {row.label}
+                    </td>
                     <td style={{ padding: '4px 6px', textDecoration: 'line-through' }}>
                       {row.oldText}
                     </td>

@@ -381,19 +381,19 @@ function PrecheckPanel({ precheck }: { precheck: ProposalPrecheck }): React.Reac
       {rows.map((row) =>
         row.pass ? (
           <Space key={row.key} align="start">
-            <Typography.Text style={{ color: '#52c41a' }}>✓</Typography.Text>
+            <Typography.Text style={{ color: 'var(--ti-ok)' }}>✓</Typography.Text>
             <Typography.Text style={{ fontSize: 12 }}>{row.text}</Typography.Text>
           </Space>
         ) : row.key === 'clamp' || row.key === 'rate' ? (
           <Space key={row.key} align="start">
-            <Typography.Text style={{ color: '#faad14' }}>⚠</Typography.Text>
+            <Typography.Text style={{ color: 'var(--ti-sev-warning)' }}>⚠</Typography.Text>
             <Typography.Text type="warning" style={{ fontSize: 12 }}>
               {row.text}
             </Typography.Text>
           </Space>
         ) : (
           <Space key={row.key} align="start">
-            <Typography.Text style={{ color: '#ff4d4f' }}>✗</Typography.Text>
+            <Typography.Text style={{ color: 'var(--ti-sev-critical)' }}>✗</Typography.Text>
             <Typography.Text type="danger" style={{ fontSize: 12 }}>
               {row.text}
             </Typography.Text>

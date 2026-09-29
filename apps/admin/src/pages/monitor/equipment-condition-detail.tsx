@@ -36,7 +36,15 @@ import {
   statusDisplayText,
 } from './monitor-data.js';
 
-const SERIES_COLORS = ['#0B7285', '#AD6800', '#CF1322', '#2B8A3E', '#6741D9'];
+// 图表序列 token（baseline §2.1 --ti-chart-1..5；深色档由 tokens.css 换算）——
+// SVG 需经 style 消费（stroke 属性不支持 var()），故存 CSS 变量引用。
+const SERIES_COLORS = [
+  'var(--ti-chart-1)',
+  'var(--ti-chart-2)',
+  'var(--ti-chart-3)',
+  'var(--ti-chart-4)',
+  'var(--ti-chart-5)',
+];
 
 const RUN_STATE_META = {
   running: { label: '运行', color: 'green' },
@@ -536,7 +544,7 @@ function TrendPanel(props: {
               .map((point) => `${px(point.xMs).toFixed(1)},${py(point.y).toFixed(1)}`)
               .join(' ')}
             fill="none"
-            stroke={SERIES_COLORS[index % SERIES_COLORS.length]}
+            style={{ stroke: SERIES_COLORS[index % SERIES_COLORS.length], fill: 'none' }}
             strokeWidth="1.5"
           />
         ))}

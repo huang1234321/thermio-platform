@@ -7,6 +7,10 @@
  * - 深色图表序列按「同序列提亮 20%」换算：#3C8E9D #5976EF #BD8633 #8E58DA #A1A6AD。
  * 增补 token（基线表外）：--ti-border-strong（控件描边）、--ti-scene-backdrop/--ti-scene-overlay
  * （3D 视口底/悬浮层，两主题同值——数字孪生视口恒为深底）。
+ * DAT-157 修单增补：--ti-sev-major/--ti-sev-minor（severity 五级 vs 三枚 token 缺口收口，
+ * FE-02 禁硬编码；取色 AntD volcano/orange 阶、双主题成对，正文对各自卡片底 AA ≥4.5:
+ * 浅 #D4380D 4.81 / #AD4E00 5.43 于 #FFFFFF；深 #FF7A45 6.44 / #FFA940 8.68 于 #1B1F24）。
+ * 对比度护栏见 styles/tokens-contrast.test.ts（改值必须连带改测试）。
  */
 
 :root,
@@ -23,6 +27,8 @@
   --ti-text-2: #51565e;
   --ti-text-3: #646c76;
   --ti-sev-critical: #cf1322;
+  --ti-sev-major: #d4380d;
+  --ti-sev-minor: #ad4e00;
   --ti-sev-warning: #9a5c00;
   --ti-sev-info: #1668dc;
   --ti-ok: #237804;
@@ -48,6 +54,8 @@
   --ti-text-2: #9aa1a9;
   --ti-text-3: #8b939c;
   --ti-sev-critical: #ff7875;
+  --ti-sev-major: #ff7a45;
+  --ti-sev-minor: #ffa940;
   --ti-sev-warning: #ffc53d;
   --ti-sev-info: #69b1ff;
   --ti-ok: #95de64;

@@ -19,20 +19,13 @@ import {
   fetchEquipmentConditions,
   statusDisplayText,
 } from './monitor-data.js';
+import { SEVERITY_COLOR, SEVERITY_LABEL } from '../alarm/alarm-shared.js';
 
 const RUN_STATE_META = {
   running: { label: '运行', color: 'green' },
   standby: { label: '备用', color: 'default' },
   fault: { label: '故障', color: 'red' },
   unknown: { label: '未知', color: 'default' },
-} as const;
-
-const SEVERITY_TAG = {
-  info: { color: 'blue', label: 'info' },
-  warning: { color: 'orange', label: 'warning' },
-  minor: { color: 'gold', label: 'minor' },
-  major: { color: 'volcano', label: 'major' },
-  critical: { color: 'red', label: 'critical' },
 } as const;
 
 /** 关键点位固定三列（同型设备点位集一致，跨卡列位对齐）。 */
@@ -186,11 +179,18 @@ export function EquipmentConditionsPage(): ReactNode {
                     </Typography.Text>
                   </Space>
                 </div>
-                {/* 告警槽固定列宽：无告警也占位，数据列不漂移 */}
+                {/* 告警槽固定列宽：无告警也占位，数据列不漂移；severity 色/词表与告警中心同源（--ti-sev-*） */}
                 <div>
                   {severity !== null ? (
-                    <Tag color={SEVERITY_TAG[severity].color} style={{ marginInlineEnd: 0 }}>
-                      在用告警 {SEVERITY_TAG[severity].label}
+                    <Tag
+                      style={{
+                        color: SEVERITY_COLOR[severity],
+                        borderColor: SEVERITY_COLOR[severity],
+                        background: 'transparent',
+                        marginInlineEnd: 0,
+                      }}
+                    >
+                      在用告警 {SEVERITY_LABEL[severity]}
                     </Tag>
                   ) : (
                     <Typography.Text type="secondary" style={{ fontSize: 12 }}>

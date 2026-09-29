@@ -42,6 +42,8 @@ export function CloseAlarmModal({
       title={`关闭告警 #${alarm === null ? '' : String(alarm.id)}`}
       open={alarm !== null}
       confirmLoading={submitting}
+      okText="确认关闭"
+      cancelText="取消"
       onCancel={onClose}
       onOk={() => {
         if (alarm === null) return;
@@ -115,6 +117,8 @@ export function SuppressModal({
       title={`抑制告警 #${alarm === null ? '' : String(alarm.id)}`}
       open={alarm !== null}
       confirmLoading={submitting}
+      okText="确认抑制"
+      cancelText="取消"
       onCancel={onClose}
       onOk={() => {
         if (alarm === null) return;

@@ -6,16 +6,20 @@ import { Tag } from 'antd';
 import type { AlarmEventStatus, AlarmSeverity, Capability } from '@thermio/shared-types';
 import { useCapabilities } from '../../app/auth-context.js';
 
-/** baseline §2 色板 token → antd 色（--ti-sev-* 语义映射，v1 就近取色）。 */
-const SEVERITY_COLOR: Record<AlarmSeverity, string> = {
-  critical: 'red',
-  major: 'volcano',
-  minor: 'orange',
-  warning: 'gold',
-  info: 'blue',
+/**
+ * severity 五级 → --ti-sev-* token（DAT-157 修单：v1 的 antd 预设色名属硬编码，
+ * FE-02 收口；major/minor token 双主题值见 styles/tokens.css）。M3 设备工况在用
+ * 告警徽标同源消费（跨页一致性）。
+ */
+export const SEVERITY_COLOR: Record<AlarmSeverity, string> = {
+  critical: 'var(--ti-sev-critical)',
+  major: 'var(--ti-sev-major)',
+  minor: 'var(--ti-sev-minor)',
+  warning: 'var(--ti-sev-warning)',
+  info: 'var(--ti-sev-info)',
 };
 
-const SEVERITY_LABEL: Record<AlarmSeverity, string> = {
+export const SEVERITY_LABEL: Record<AlarmSeverity, string> = {
   critical: '紧急',
   major: '严重',
   minor: '较重',
@@ -24,7 +28,12 @@ const SEVERITY_LABEL: Record<AlarmSeverity, string> = {
 };
 
 export function SeverityTag({ severity }: { severity: AlarmSeverity }): React.ReactNode {
-  return <Tag color={SEVERITY_COLOR[severity]}>{SEVERITY_LABEL[severity]}</Tag>;
+  const color = SEVERITY_COLOR[severity];
+  return (
+    <Tag style={{ color, borderColor: color, background: 'transparent' }}>
+      {SEVERITY_LABEL[severity]}
+    </Tag>
+  );
 }
 
 const STATUS_LABEL: Record<AlarmEventStatus, string> = {

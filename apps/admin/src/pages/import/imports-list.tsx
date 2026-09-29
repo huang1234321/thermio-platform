@@ -1,7 +1,8 @@
 /**
  * 导入历史页 /imports（M2-import §10.3；原型「导入历史」屏）：
  * GET /imports 列表（状态筛选 + 状态/行数/命中率列）+ 状态机徽标；行点击 → /imports/:id
- * （向导恢复态或报告态合一）；发起按钮显隐 = imports.write（baseline §1.2 能力键列）。
+ * （向导恢复态或报告态合一）；游标分页「加载更多 + 已加载计数」（§3.1，DAT-157 修单）；
+ * 列表时间相对显示（§2.2，hover 完整时间戳）；发起按钮显隐 = imports.write。
  */
 import { Alert, Button, Card, Empty, Select, Space, Spin, Table, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
@@ -14,29 +15,40 @@ import {
 } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
 import { useHasCapability } from '../asset/asset-shared.js';
+import { RelativeTime } from '../relative-time.js';
 import { JobStatusTag } from './import-shared.js';
 
 export function ImportsListPage(): React.ReactNode {
   const canWrite = useHasCapability('imports.write');
   const navigate = useNavigate();
   const [items, setItems] = useState<ImportJob[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ImportJobStatus | undefined>(undefined);
 
-  const load = useCallback(async (): Promise<void> => {
-    try {
-      const params = new URLSearchParams({ limit: '50' });
-      if (status !== undefined) params.set('status', status);
-      const result = await apiFetch(`/imports?${params.toString()}`, ImportJobListResponseSchema);
-      setItems(result.items);
-      setError(null);
-    } catch {
-      setError('导入历史加载失败');
-    } finally {
-      setLoading(false);
-    }
-  }, [status]);
+  const load = useCallback(
+    async (nextCursor?: string): Promise<void> => {
+      try {
+        const params = new URLSearchParams({ limit: '50' });
+        if (status !== undefined) params.set('status', status);
+        if (nextCursor !== undefined && nextCursor.length > 0) params.set('cursor', nextCursor);
+        const result = await apiFetch(`/imports?${params.toString()}`, ImportJobListResponseSchema);
+        setItems((prev) => (nextCursor === undefined ? result.items : [...prev, ...result.items]));
+        setTotal((prev) =>
+          nextCursor === undefined ? result.items.length : (prev ?? 0) + result.items.length,
+        );
+        setCursor(result.next_cursor);
+        setError(null);
+      } catch {
+        setError('导入历史加载失败');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [status],
+  );
 
   useEffect(() => {
     void load();
@@ -72,6 +84,9 @@ export function ImportsListPage(): React.ReactNode {
             ＋ 新建导入（向导）
           </Button>
         )}
+        {total !== null && (
+          <Typography.Text type="secondary">已加载 {String(items.length)} 条</Typography.Text>
+        )}
       </Space>
       {error !== null && <Alert type="error" showIcon message={error} />}
       <Card title="导入历史">
@@ -90,7 +105,7 @@ export function ImportsListPage(): React.ReactNode {
               },
               style: { cursor: 'pointer' },
             })}
-            pagination={{ pageSize: 20 }}
+            pagination={false}
             columns={[
               {
                 title: '作业',
@@ -134,10 +149,22 @@ export function ImportsListPage(): React.ReactNode {
                 title: '时间',
                 dataIndex: 'created_at',
                 width: 170,
-                render: (value: string) => new Date(value).toLocaleString(),
+                render: (value: string) => <RelativeTime iso={value} />,
               },
             ]}
           />
+        )}
+        {cursor !== null && (
+          <Button
+            block
+            style={{ marginTop: 12 }}
+            onClick={() => {
+              void load(cursor);
+            }}
+            loading={loading}
+          >
+            加载更多
+          </Button>
         )}
       </Card>
     </Space>

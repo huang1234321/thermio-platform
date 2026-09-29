@@ -1,7 +1,9 @@
 /**
  * 告警规则页 /alarm-rules（M4-alarm.md §7 行 3）：规则表格 + 编辑表单
  * （rule_type 定 scope（组合矩阵 §4.1）/severity/sustained_s/params 动态表单/启停开关）；
- * 删除危险色 + 确认（409 rule_in_use 内联提示改停用）。能力 alarm_rules.write（admin）。
+ * 删除确认按钮不用危险色（§4.2 白名单：危险色仅 apply/凭证轮换；DAT-157 修单）；
+ * 游标分页「加载更多 + 已加载计数」（§3.1）；创建时间相对显示（§2.2）。
+ * 能力 alarm_rules.write（admin）。
  */
 import {
   Alert,
@@ -32,7 +34,8 @@ import {
 import { AlarmRuleSchema } from '@thermio/shared-types';
 import { apiFetch } from '../../app/api-client.js';
 import { errorText } from '../asset/asset-shared.js';
-import { SeverityTag, formatTime, useHasCapability } from './alarm-shared.js';
+import { RelativeTime } from '../relative-time.js';
+import { SeverityTag, useHasCapability } from './alarm-shared.js';
 import { noContent } from './alarm-actions.js';
 
 /** rule_type × scope 组合矩阵（§4.1 表；scope 由 rule_type 推导，不可选错）。 */
@@ -61,18 +64,29 @@ interface RuleFormValues {
 export function AlarmRulesPage(): React.ReactNode {
   const canWrite = useHasCapability('alarm_rules.write');
   const [items, setItems] = useState<readonly AlarmRule[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<AlarmRule | null>(null);
   const [form] = Form.useForm<RuleFormValues>();
 
-  const load = useCallback(async (): Promise<void> => {
+  const load = useCallback(async (nextCursor?: string): Promise<void> => {
     setLoading(true);
     setError(null);
     try {
-      const result = await apiFetch('/alarm-rules?limit=200', AlarmRuleListResponseSchema);
-      setItems(result.items);
+      const params = new URLSearchParams({ limit: '50' });
+      if (nextCursor !== undefined && nextCursor.length > 0) params.set('cursor', nextCursor);
+      const result = await apiFetch(
+        `/alarm-rules?${params.toString()}`,
+        AlarmRuleListResponseSchema,
+      );
+      setItems((prev) => (nextCursor === undefined ? result.items : [...prev, ...result.items]));
+      setTotal((prev) =>
+        nextCursor === undefined ? result.items.length : (prev ?? 0) + result.items.length,
+      );
+      setCursor(result.next_cursor);
     } catch (cause) {
       setError(errorText(cause, '规则列表加载失败'));
     } finally {
@@ -185,7 +199,7 @@ export function AlarmRulesPage(): React.ReactNode {
                   method: 'PATCH',
                   body: { enabled: checked },
                 })
-                  .then(load)
+                  .then(() => load())
                   .catch((cause: unknown) => message.error(errorText(cause, '启停失败')))
               }
             />
@@ -197,7 +211,7 @@ export function AlarmRulesPage(): React.ReactNode {
         title: '创建时间',
         dataIndex: 'created_at',
         width: 170,
-        render: (value: string) => formatTime(value),
+        render: (value: string) => <RelativeTime iso={value} />,
       },
       {
         title: '操作',
@@ -217,7 +231,8 @@ export function AlarmRulesPage(): React.ReactNode {
               <Popconfirm
                 title="删除该规则？"
                 description="仍被告警引用的规则无法删除（将提示改用停用）"
-                okButtonProps={{ danger: true }}
+                okText="确认删除"
+                cancelText="取消"
                 onConfirm={() =>
                   void apiFetch(`/alarm-rules/${row.id}`, noContent, { method: 'DELETE' })
                     .then(() => {
@@ -229,9 +244,7 @@ export function AlarmRulesPage(): React.ReactNode {
                     )
                 }
               >
-                <Button size="small" danger>
-                  删除
-                </Button>
+                <Button size="small">删除</Button>
               </Popconfirm>
             </Space>
           ),
@@ -244,16 +257,21 @@ export function AlarmRulesPage(): React.ReactNode {
     <Card
       title="告警规则"
       extra={
-        canWrite && (
-          <Button
-            type="primary"
-            onClick={() => {
-              openEditor(null);
-            }}
-          >
-            新建规则
-          </Button>
-        )
+        <Space>
+          {total !== null && (
+            <Typography.Text type="secondary">已加载 {String(items.length)} 条</Typography.Text>
+          )}
+          {canWrite && (
+            <Button
+              type="primary"
+              onClick={() => {
+                openEditor(null);
+              }}
+            >
+              新建规则
+            </Button>
+          )}
+        </Space>
       }
     >
       {error !== null && (
@@ -267,6 +285,18 @@ export function AlarmRulesPage(): React.ReactNode {
         dataSource={[...items]}
         pagination={false}
       />
+      {cursor !== null && (
+        <Button
+          block
+          style={{ marginTop: 12 }}
+          onClick={() => {
+            void load(cursor);
+          }}
+          loading={loading}
+        >
+          加载更多
+        </Button>
+      )}
       <Modal
         title={editing === null ? '新建规则' : '编辑规则（scope/type 不可变，重定向 = 新建）'}
         open={editorOpen}

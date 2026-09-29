@@ -6,8 +6,14 @@
  *   theme.token 映射同一组值」）；深色实底按钮文字用同色相深青黑（白字 on #54C7D8 仅 1.99）。
  *
  * 存储键与 index.html 首屏预设脚本共用（thermio.theme），改动须两侧同步。
+ *
+ * AntD 组件文案 locale 全局收口 zh-CN（DAT-157 修单簇 2：RangePicker 等内置英文
+ * 占位/按钮文案；antd 官方配方 = ConfigProvider locale + dayjs locale）。
  */
 import { ConfigProvider, theme as antdTheme } from 'antd';
+import zhCN from 'antd/locale/zh_CN';
+import dayjs from 'dayjs';
+import 'dayjs/locale/zh-cn';
 import {
   createContext,
   useCallback,
@@ -17,6 +23,8 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+
+dayjs.locale('zh-cn');
 
 export type ThemeMode = 'light' | 'dark';
 
@@ -116,6 +124,7 @@ export function ThemeProvider({ children }: { children: ReactNode }): ReactNode 
   return (
     <ThemeContext.Provider value={value}>
       <ConfigProvider
+        locale={zhCN}
         theme={{
           algorithm: mode === 'dark' ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
           token: ANT_TOKENS[mode],

@@ -175,7 +175,7 @@ export function ProposalExecutionPage(): React.ReactNode {
               : '—'}
             {view.verify.readings.length > 0 &&
               (view.verify.readings[view.verify.readings.length - 1]?.match === true ? (
-                <Typography.Text style={{ color: '#52c41a' }}> ✓</Typography.Text>
+                <Typography.Text style={{ color: 'var(--ti-ok)' }}> ✓</Typography.Text>
               ) : (
                 <Typography.Text type="danger"> ✗</Typography.Text>
               ))}
@@ -218,7 +218,7 @@ export function ProposalExecutionPage(): React.ReactNode {
                   value === null ? (
                     '—'
                   ) : value ? (
-                    <Typography.Text style={{ color: '#52c41a' }}>✓</Typography.Text>
+                    <Typography.Text style={{ color: 'var(--ti-ok)' }}>✓</Typography.Text>
                   ) : (
                     <Typography.Text type="danger">✗</Typography.Text>
                   ),

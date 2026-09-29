@@ -136,7 +136,10 @@ export function FusePage(): React.ReactNode {
           <Card
             key={systemId}
             size="small"
-            style={{ width: 340, borderColor: fuse === 'open' ? '#cf1322' : undefined }}
+            style={{
+              width: 340,
+              borderColor: fuse === 'open' ? 'var(--ti-sev-critical)' : undefined,
+            }}
             title={
               <Space size={8}>
                 <span>{system?.name}</span>

@@ -39,7 +39,6 @@ export function AlarmBadge(): React.ReactNode {
   return (
     <Button
       type="text"
-      style={{ color: '#fff' }}
       onClick={() => void navigate('/alarms')}
       title="当前未确认告警（critical 单独红点）"
     >

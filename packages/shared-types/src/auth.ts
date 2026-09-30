@@ -35,6 +35,9 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
  *
  * IMPL-17 增量（M5-proposal.md §1.5 定稿键名逐字）：
  * proposals.decide.write（operator+：approve/reject）。
+ *
+ * IMPL-16 切片增量（M6-fdd.md §5/R6 定稿键名逐字，DAT-212）：
+ * fdd.write（operator+：抽检记录 + 忽略）。
  */
 export const CAPABILITIES = [
   'monitor.read',
@@ -45,6 +48,7 @@ export const CAPABILITIES = [
   'proposals.read',
   'proposals.decide.write',
   'fdd.read',
+  'fdd.write',
   'assets.read',
   'assets.write',
   'points.semantics.write',
@@ -98,6 +102,7 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'points.semantics.write',
     'alarms.ack',
     'proposals.decide.write',
+    'fdd.write',
   ],
   admin: [
     ...VIEWER_CAPABILITIES,
@@ -112,6 +117,7 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'gateways.manage',
     'control.write',
     'users.manage',
+    'fdd.write',
   ],
 };
 

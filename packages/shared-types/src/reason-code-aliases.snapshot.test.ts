@@ -23,8 +23,9 @@ const LOWER_SNAKE_DOMAIN_CAUSE = /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/;
  * 审计基线（2026-09-26，DAT-102）：伞仓 main 的 overview.md / flows.md / ddl.md /
  * platform.md 全文反引号大写码逐条对照后的 reason_code 清单共 65 条，本表须逐一覆盖、
  * 零自造（表内每键都能在蓝本找到出处；蓝本外排除项见 PR 描述）。
+ * 增量：IMPL-16 切片（DAT-212，M6-fdd.md §4.6）+FDD_STATE_INVALID（fdd.state_invalid）。
  */
-const AUDITED_DESIGN_CODE_COUNT = 67;
+const AUDITED_DESIGN_CODE_COUNT = 68;
 
 describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
   it('shouldRequireExplicitSnapshotUpdate_whenAnyMappingChanges', () => {
@@ -47,6 +48,7 @@ describe('OVERVIEW_DESIGN_CODE_ALIASES closed-set snapshot', () => {
         "EQUIPMENT_TYPE_UNKNOWN": "asset.equipment_type_unknown",
         "FDD_FINDING_NOT_FOUND": "fdd.finding_not_found",
         "FDD_REPORT_NOT_FOUND": "fdd.report_not_found",
+        "FDD_STATE_INVALID": "fdd.state_invalid",
         "FORBIDDEN": "auth.forbidden",
         "GATEWAY_NOT_FOUND": "gateway.not_found",
         "GATEWAY_SERIAL_DUPLICATE": "gateway.serial_duplicate",
@@ -188,8 +190,6 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
     expect({ registered: registered.sort(), draft: draft.sort() }).toMatchInlineSnapshot(`
       {
         "draft": [
-          "FDD_FINDING_NOT_FOUND",
-          "FDD_REPORT_NOT_FOUND",
           "IMPORT_TEMPLATE_MISMATCH",
           "POINT_INACTIVE",
           "PROPOSAL_VERIFY_FAILED",
@@ -211,6 +211,9 @@ describe('闭集不变量（映射规式的机械校验面）', () => {
           "CREDENTIAL_NOT_FOUND",
           "EQUIPMENT_LOCAL_ID_DUPLICATE",
           "EQUIPMENT_TYPE_UNKNOWN",
+          "FDD_FINDING_NOT_FOUND",
+          "FDD_REPORT_NOT_FOUND",
+          "FDD_STATE_INVALID",
           "FORBIDDEN",
           "GATEWAY_NOT_FOUND",
           "GATEWAY_SERIAL_DUPLICATE",

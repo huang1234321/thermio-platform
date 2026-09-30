@@ -37,6 +37,9 @@ interface FindingRow {
   readonly first_detected_at: Date;
   readonly last_detected_at: Date;
   readonly resolved_at: Date | null;
+  readonly ignored_at: Date | null;
+  readonly review_result: string | null;
+  readonly reviewed_at: Date | null;
   readonly created_at: Date;
   readonly building_id: string;
   readonly equipment_id: string;
@@ -64,8 +67,15 @@ function findingItemOf(row: FindingRow): FddFindingListItem {
     first_detected_at: row.first_detected_at.toISOString(),
     last_detected_at: row.last_detected_at.toISOString(),
     resolved_at: row.resolved_at === null ? null : row.resolved_at.toISOString(),
-    ignored_at: null, // 列集未落（M6 §3.3 提案）——恒 null
-    review: null,
+    // review 摘要与 ignored_at 随 0009 落列带出（algo 不消费但形状不裁剪，M6 §6）
+    ignored_at: row.ignored_at === null ? null : row.ignored_at.toISOString(),
+    review:
+      row.review_result === null || row.reviewed_at === null
+        ? null
+        : {
+            result: row.review_result as NonNullable<FddFindingListItem['review']>['result'],
+            reviewed_at: row.reviewed_at.toISOString(),
+          },
     created_at: row.created_at.toISOString(),
   };
 }
@@ -88,8 +98,8 @@ export class InternalFddReadService {
     return this.tenantDb.withTenant(tenantId, async (tx) => {
       const params: unknown[] = [query.building_id];
       let next = 2;
-      // 活跃窗口（M6 §5.2 原文谓词；ignored_at 列未落（M6 §3.3 提案）恒 NULL，
-      // 谓词按现存列收敛为 resolved_at）
+      // 活跃窗口谓词（M6 §5.2 一处定义两处消费；effective_end =
+      // COALESCE(resolved_at, ignored_at)，0009 落列后与 admin 面同式）
       const where: string[] = ['s.building_id = $1::uuid'];
       if (query.to !== undefined) {
         where.push(`f.first_detected_at < $${String(next)}::timestamptz`);
@@ -98,7 +108,10 @@ export class InternalFddReadService {
       }
       const effectiveFrom = query.from;
       if (effectiveFrom !== undefined) {
-        where.push(`(f.resolved_at IS NULL OR f.resolved_at >= $${String(next)}::timestamptz)`);
+        where.push(
+          `(COALESCE(f.resolved_at, f.ignored_at) IS NULL
+             OR COALESCE(f.resolved_at, f.ignored_at) >= $${String(next)}::timestamptz)`,
+        );
         params.push(effectiveFrom);
         next += 1;
       }
@@ -120,7 +133,7 @@ export class InternalFddReadService {
       const result = await tx.query<FindingRow>(
         `SELECT f.id, f.rule_key, f.severity, f.status, f.title, f.suggested_action,
               f.algo_version, f.first_detected_at, f.last_detected_at, f.resolved_at,
-              f.created_at,
+              f.ignored_at, f.review_result, f.reviewed_at, f.created_at,
               s.building_id, e.id AS equipment_id, e.name AS equipment_name,
               e.local_id AS equipment_local_id, e.equipment_type
        FROM fdd_finding f

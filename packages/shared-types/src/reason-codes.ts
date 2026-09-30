@@ -188,6 +188,10 @@ export const REASON_CODES = [
   'stream.limit_exceeded',
   'point.not_found',
   'stream.server_busy',
+  // FDD 域（M6 查看端点，modules/M6-fdd.md §4.6；IMPL-16 切片 / DAT-212 注册）
+  'fdd.finding_not_found',
+  'fdd.report_not_found',
+  'fdd.state_invalid',
   'proposal.not_found',
   'proposal.state_invalid',
   'proposal.expired',
@@ -527,6 +531,22 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     description:
       '遥测查询跨度超限或 from/to 时间参数无效（跨度上限按 interval 分档，shared-types TELEMETRY_SPAN_LIMIT_DAYS）',
   },
+  // FDD 域（M6 §4.6；IMPL-16 切片 / DAT-212 注册——overview §4 M6 草案码机械映射 + 新增 state_invalid）
+  'fdd.finding_not_found': {
+    domain: 'fdd',
+    http: 404,
+    description: '发现不存在或跨租户/越楼宇（SEC-AZ-03 不区分文案）',
+  },
+  'fdd.report_not_found': {
+    domain: 'fdd',
+    http: 404,
+    description: '报告不存在或越权（SEC-AZ-03 不区分文案）',
+  },
+  'fdd.state_invalid': {
+    domain: 'fdd',
+    http: 409,
+    description: 'ignore 作用于非 open 发现（resolved 终态不可忽略；已 ignored 幂等 200 不走本码）',
+  },
   'telemetry.store_unavailable': {
     domain: 'telemetry',
     http: 503,
@@ -752,5 +772,6 @@ export const OVERVIEW_DESIGN_CODE_ALIASES: Readonly<Record<string, string>> = {
   // ── FDD（M6）/ 组态（M3）草案码 ──
   FDD_FINDING_NOT_FOUND: 'fdd.finding_not_found',
   FDD_REPORT_NOT_FOUND: 'fdd.report_not_found',
+  FDD_STATE_INVALID: 'fdd.state_invalid',
   SCENE_NOT_FOUND: 'scene.not_found',
 };

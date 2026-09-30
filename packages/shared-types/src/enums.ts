@@ -101,6 +101,26 @@ export const FDD_REPORT_PERIOD_TYPES = ['day', 'week'] as const;
 export const FddReportPeriodTypeSchema = z.enum(FDD_REPORT_PERIOD_TYPES);
 export type FddReportPeriodType = (typeof FDD_REPORT_PERIOD_TYPES)[number];
 
+/**
+ * FDD 抽检判定结论（modules/M6-fdd.md §2.2 / PRD §7 S3；IMPL-16 切片 / DAT-212 注册）。
+ * 正交于 status 状态机：回答「这条发现对不对」，可覆写（最新结论生效）。
+ */
+export const FDD_REVIEW_RESULTS = ['confirmed', 'false_positive'] as const;
+export const FddReviewResultSchema = z.enum(FDD_REVIEW_RESULTS);
+export type FddReviewResult = (typeof FDD_REVIEW_RESULTS)[number];
+
+/**
+ * FDD 严重度健康度权重（modules/M6-fdd.md §4.1：报告聚合与概览共用；
+ * weighted_score = Σ 权重 × 未决数。随枚举快照钉死——改值走 shared-types 发版）。
+ */
+export const FDD_SEVERITY_WEIGHTS = {
+  info: 1,
+  warning: 2,
+  minor: 4,
+  major: 8,
+  critical: 16,
+} as const;
+
 /** 提案状态机（DATA-MODEL §3.5 proposal.status）。 */
 export const PROPOSAL_STATUSES = [
   'pending',

@@ -39,6 +39,10 @@ import { SettingsUsersPage } from '../pages/settings-users.js';
 import { MonitorOverviewPage } from '../pages/monitor/monitor-overview.js';
 import { EquipmentConditionsPage } from '../pages/monitor/equipment-conditions.js';
 import { EquipmentConditionDetailPage } from '../pages/monitor/equipment-condition-detail.js';
+import { FddOverviewPage } from '../pages/fdd/fdd-overview.js';
+import { FddFindingsPage } from '../pages/fdd/fdd-findings.js';
+import { FddFindingDetailPage } from '../pages/fdd/fdd-finding-detail.js';
+import { FddReportsPage, FddReportDetailPage } from '../pages/fdd/fdd-reports.js';
 
 function RequireAuth(): ReactNode {
   const { state } = useAuth();
@@ -68,10 +72,6 @@ function RequireCapability({ capability }: { capability: Capability }): ReactNod
   return <Outlet />;
 }
 
-const PLACEHOLDER_ROUTES: readonly { path: string; title: string }[] = [
-  { path: '/fdd', title: 'FDD 报告（M6）' },
-];
-
 export function App(): ReactNode {
   return (
     <Routes>
@@ -80,13 +80,14 @@ export function App(): ReactNode {
         <Route element={<RequirePasswordRotation />}>
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/monitor" replace />} />
-            {PLACEHOLDER_ROUTES.map((route) => (
-              <Route
-                key={route.path}
-                path={route.path}
-                element={<ModulePlaceholderPage title={route.title} />}
-              />
-            ))}
+            {/* FDD 组（M6-fdd §7：概览/发现列表/详情/报告列表/报告详情，能力 fdd.read） */}
+            <Route element={<RequireCapability capability="fdd.read" />}>
+              <Route path="/fdd" element={<FddOverviewPage />} />
+              <Route path="/fdd/findings" element={<FddFindingsPage />} />
+              <Route path="/fdd/findings/:findingId" element={<FddFindingDetailPage />} />
+              <Route path="/fdd/reports" element={<FddReportsPage />} />
+              <Route path="/fdd/reports/:reportId" element={<FddReportDetailPage />} />
+            </Route>
             {/* 告警组（M4-alarm §7：3 页 + 抑制记录入口，能力 alarms.read） */}
             <Route element={<RequireCapability capability="alarms.read" />}>
               <Route path="/alarms" element={<AlarmsPage />} />

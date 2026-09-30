@@ -44,6 +44,7 @@ import {
   ControlFuseEventTypeSchema,
   ControlFuseStatusSchema,
   FddFindingStatusSchema,
+  FddReviewResultSchema,
   FddReportPeriodTypeSchema,
   ControlModeSchema,
   ImportFailureCodeSchema,
@@ -377,6 +378,8 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     // FDD 域（IMPL-17 并入项，DAT-104 管道同步覆盖）
     expect(FddFindingStatusSchema.safeParse('closed').success).toBe(false);
     expect(FddReportPeriodTypeSchema.safeParse('month').success).toBe(false);
+    // FDD 抽检判定（IMPL-16 切片 / DAT-212：正交判定封闭集拒绝未注册值）
+    expect(FddReviewResultSchema.safeParse('ignored_review').success).toBe(false);
     // 熔断域（DAT-104：随 IMPL-18 落地的两组；half_open 为 ddl §9.3 显式排除态）
     expect(ControlFuseStatusSchema.safeParse('half_open').success).toBe(false);
     expect(ControlFuseEventTypeSchema.safeParse('cooldown').success).toBe(false);
@@ -396,6 +399,9 @@ describe('closed-set enforcement (platform.md §6.4)', () => {
     expect(AlarmScopeSchema.safeParse('gateway').success).toBe(true);
     expect(FddFindingStatusSchema.safeParse('ignored').success).toBe(true);
     expect(FddReportPeriodTypeSchema.safeParse('week').success).toBe(true);
+    // FDD 抽检判定（IMPL-16 切片 / DAT-212）
+    expect(FddReviewResultSchema.safeParse('confirmed').success).toBe(true);
+    expect(FddReviewResultSchema.safeParse('false_positive').success).toBe(true);
     // 熔断域（DAT-104：随 IMPL-18 落地）
     expect(ControlFuseStatusSchema.safeParse('open').success).toBe(true);
     expect(ControlFuseStatusSchema.safeParse('closed').success).toBe(true);

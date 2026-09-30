@@ -33,6 +33,7 @@ import { AssetModule } from './asset/asset.module.js';
 import { AlarmModule } from './alarm/alarm.module.js';
 import { ProposalModule } from './proposal/proposal.module.js';
 import { InternalFddModule } from './internal-fdd/internal-fdd.module.js';
+import { FddModule } from './fdd/fdd.module.js';
 import { InternalAlgoModule } from './internal-algo/internal-algo.module.js';
 import { ImportModule } from './import/import.module.js';
 import { ControlSafetyModule } from './control-safety/control-safety.module.js';
@@ -61,6 +62,7 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
     InternalAlgoModule,
     ProposalModule,
     InternalFddModule,
+    FddModule,
     ImportModule,
     ControlSafetyModule,
   ],

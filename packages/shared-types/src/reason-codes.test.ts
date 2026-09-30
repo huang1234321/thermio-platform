@@ -42,7 +42,9 @@ describe('reason_code registry', () => {
     //   expired / payload_invalid / reason_required / client_ref_duplicate〔R2 占位〕）。
     // + IMPL-18 闸门改名净增 2 + M8 七码（DAT-164：v1.5 改名〔R1，DAT-132〕旧五码
     //   → 新五码 + 溢出/超时两子码；overview §4 M8 码列 point.* 七码注册）。
-    expect(REASON_CODES).toHaveLength(75);
+    // + IMPL-16 切片三码（DAT-212，M6-fdd.md §4.6：fdd.finding_not_found /
+    //   fdd.report_not_found / fdd.state_invalid——前二为既有草案码机械映射转正注册）。
+    expect(REASON_CODES).toHaveLength(78);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

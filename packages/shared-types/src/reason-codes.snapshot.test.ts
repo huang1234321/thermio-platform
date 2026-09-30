@@ -105,6 +105,15 @@ describe('reason_code registry snapshot', () => {
         "credential.not_found": {
           "http": 404,
         },
+        "fdd.finding_not_found": {
+          "http": 404,
+        },
+        "fdd.report_not_found": {
+          "http": 404,
+        },
+        "fdd.state_invalid": {
+          "http": 409,
+        },
         "gateway.not_found": {
           "http": 404,
         },

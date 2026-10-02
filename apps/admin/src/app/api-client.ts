@@ -2,6 +2,8 @@
  * api 客户端（platform.md §5.3 客户端面 / API-CT-01）：
  * - 响应一律 safeParse 后使用，不裸断言网络 JSON（畸形走通用兜底，API-ERR-02）；
  * - access 过期（auth.token_expired）自动刷新一次重放；刷新失败清会话回登录页；
+ * - 刷新为 single-flight（DAT-160）：boot 会话恢复与 401 重试并发时共享同一
+ *   in-flight 请求，token 轮换竞态下不再出现 refresh 200→401 成对与假登出；
  * - token 存放：access 内存 + refresh localStorage（MVP 形态；升级 httpOnly cookie
  *   随部署安全评审，属已知边界不在本卡范围）。
  */
@@ -61,7 +63,10 @@ async function parseEnvelopeError(response: Response): Promise<ApiError> {
   return new ApiError(response.status, parsed);
 }
 
-export async function doRefresh(): Promise<LoginResponse> {
+/** single-flight 状态（模块级；DAT-160）：非空表示已有一次刷新在途，后来者共享之。 */
+let inFlightRefresh: Promise<LoginResponse> | null = null;
+
+async function performRefresh(): Promise<LoginResponse> {
   const refreshToken = loadStoredRefreshToken();
   if (refreshToken === null) throw new Error('no refresh token');
   const response = await fetch('/api/v1/auth/refresh', {
@@ -69,11 +74,33 @@ export async function doRefresh(): Promise<LoginResponse> {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ refresh_token: refreshToken }),
   });
-  if (!response.ok) throw await parseEnvelopeError(response);
+  if (!response.ok) {
+    // 轮换竞态兜底（DAT-160）：本次失败所用 token 已被本地换新（他路刚轮换成功，
+    // 如 applyNewTokens 改密换发），说明会话仍活着 → 用现存新 token 重试一次，
+    // 不把可恢复会话误判为过期清掉。本地 token 未变则是真过期，照常抛出。
+    if (response.status === 401 && loadStoredRefreshToken() !== refreshToken) {
+      return performRefresh();
+    }
+    throw await parseEnvelopeError(response);
+  }
   const parsed = LoginResponseSchema.safeParse(await response.json());
   if (!parsed.success) throw new Error('refresh 响应不符合契约');
   storeTokens(parsed.data);
   return parsed.data;
+}
+
+/**
+ * single-flight 刷新（DAT-160）：boot 会话恢复（auth-context 挂载 effect）与
+ * apiFetch 401 重试并发调用时只发一次网络请求、共享同一结果——否则整页 reload
+ * 下两条路径各持同一存量 token 先后刷新，轮换语义使后到者 401 并误清会话（假登出）。
+ */
+export function doRefresh(): Promise<LoginResponse> {
+  if (inFlightRefresh === null) {
+    inFlightRefresh = performRefresh().finally(() => {
+      inFlightRefresh = null;
+    });
+  }
+  return inFlightRefresh;
 }
 
 export interface ApiCallOptions {

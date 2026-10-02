@@ -22,7 +22,29 @@ export PGDATABASE
 : "${PGUSER:=postgres}"
 export PGUSER
 
-usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 1; }
+# usage 不依赖 $0：README/CI 均按 `bash -s < create-tenant.sh` 管道模式执行，
+# 该模式下 $0 是 shell 名而非脚本路径（grep 无从取文件）；文本内嵌，两条路径同源。
+usage() {
+  cat <<'USAGE'
+create-tenant.sh — 租户开通运维脚本（ddl.md §5.3）
+首个 tenant 行无法经 RLS api 角色插入（鸡生蛋），开通走 superuser 运维通道，
+属平台开通流程，不是运行时 API。
+
+动作（单事务，全部幂等可重跑——重跑零副作用，tenant_id 不变）：
+  1. INSERT tenant（slug 命名空间唯一，ON CONFLICT DO NOTHING）
+  2. 三角色种子：admin / operator / viewer（ddl.md §4 role.name CHECK）
+  3. 初始 admin 用户 + user_role 授 admin
+
+密码哈希由调用方（平台/运维）按 SEC-PW-01（argon2id/bcrypt）计算后传入，本脚本不生成明文哈希逻辑。
+
+用法：
+  create-tenant.sh --slug <slug> --name <名称> --admin-email <邮箱> \
+                   --admin-password-hash '<argon2id/bcrypt 串>' [--admin-display-name <显示名>] [--deployment-mode private|saas]
+连接：PG* 环境变量（须 superuser 通道；默认 PGUSER=postgres / PGDATABASE=thermio）。
+输出：末行 `tenant_id=<uuid>`（机器可读）；失败非 0 退出。
+USAGE
+  exit 1
+}
 
 TENANT_SLUG="" TENANT_NAME="" ADMIN_EMAIL="" ADMIN_PASSWORD_HASH=""
 ADMIN_DISPLAY_NAME="Admin" DEPLOYMENT_MODE="private"

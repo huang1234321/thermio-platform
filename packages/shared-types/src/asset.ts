@@ -2,7 +2,7 @@
  * 资产与接入管理契约（modules/M1-asset.md v1.2，IMPL-11 / DAT-114）。
  *
  * 端点全集（蓝本 implementation-plan IMPL-11 范围 = §3.1–§3.6/§3.8/§3.9；
- * §3.7 遥测读取实现归 IMPL-12（telemetry.ts），§3.10 物理编辑随 DAT-151 另派）：
+ * §3.7 遥测读取实现归 IMPL-12（telemetry.ts），§3.10 物理编辑随 DAT-151 落码）：
  * - 楼宇/系统/设备 CRUD（§3.1–§3.3）；
  * - 点位跨层级检索/详情/语义白名单 PATCH/启停（§3.4–§3.6）；
  * - 网关登记/编辑 + 凭证生成/轮换/吊销（§3.8/§3.9）。
@@ -366,7 +366,7 @@ export const POINT_GATE_FIELDS = [
   'control_mode',
 ] as const;
 
-/** 物理层字段（§3.10 DAT-151 专用端点；本卡不接——details.allowed 定向提示用）。 */
+/** 物理层字段（§3.10 DAT-151 专用端点白名单——路由隔离守卫 details.allowed 用）。 */
 export const POINT_PHYSICAL_FIELDS = [
   'raw_name',
   'gateway_id',
@@ -430,6 +430,37 @@ export const PointBatchStatusResponseSchema = z.object({
   items: z.array(PointBatchStatusItemSchema),
 });
 export type PointBatchStatusResponse = z.infer<typeof PointBatchStatusResponseSchema>;
+
+// ---------------------------------------------------------------------------
+// §3.10 点位物理层编辑（admin；DAT-151，O2 原文四字段白名单 + reason 必填）
+// ---------------------------------------------------------------------------
+
+/** protocol_address 上限（§3.10 loose schema：任意 JSON 对象 ≤4KB）。 */
+export const POINT_PHYSICAL_ADDRESS_MAX_BYTES = 4096;
+
+/**
+ * 物理 PATCH 请求体。**刻意不 strict**（与语义 PATCH 同款）：路由隔离守卫
+ * （point.field_not_allowed 400）要看白名单外的键名才能定向（语义字段→§3.5、
+ * status→§3.6、闸门→M8），键层收窄在控制器守卫完成，值校验在本 schema（422）。
+ */
+export const PointPhysicalPatchSchema = z.object({
+  /** trim 后 1..128（M2 §5 同款）；同网关唯一含停用点（服务层预检 + 索引兜底）。 */
+  raw_name: z.string().trim().min(1).max(128).optional(),
+  /** loose schema（MVP 形态 {"ref": raw_name}）；非对象或超 4KB → 422。 */
+  protocol_address: z
+    .record(z.string(), z.unknown())
+    .refine(
+      (value) => utf8ByteLength(JSON.stringify(value)) <= POINT_PHYSICAL_ADDRESS_MAX_BYTES,
+      'protocol_address 序列化后超过 4KB 上限',
+    )
+    .optional(),
+  /** 迁移目标网关（同楼宇；不可置 null——v1 注册来源仅 mqtt_gateway，§2.4）。 */
+  gateway_id: z.uuid().optional(),
+  direction: DirectionSchema.optional(),
+  /** 必填，入结构化日志——不入 config_audit（field 封闭集=闸门参数，P1-4）。 */
+  reason: z.string().min(1).max(512),
+});
+export type PointPhysicalPatch = z.infer<typeof PointPhysicalPatchSchema>;
 
 // ---------------------------------------------------------------------------
 // §2.5 Gateway（ddl §4 表 gateway，11 列；status/last_seen_at 只读——EMQX 维护）

@@ -63,11 +63,19 @@ export function useHasFddCapability(capability: Capability): boolean {
  * 一并进抽检池是**有意为之**（「不少于」语义）。
  */
 export function weeklySamplePreset(now: Date = new Date()): { from: string; to: string } {
-  const day = now.getDay(); // 0=周日
+  // 周界锚定业务时区北京（UTC+8），与运行环境本地时区解耦：采样窗口是服务端
+  // 查询口径（§5.2「本周一零点」为楼宇业务日），若按浏览器/runner 本地时区取整，
+  // 非 +08 环境会偏移 8h（CI 为 UTC 时实测 3 例失败）。
+  const BUS_TZ_OFFSET_MS = 8 * 60 * 60 * 1000;
+  const shifted = new Date(now.getTime() + BUS_TZ_OFFSET_MS);
+  const day = shifted.getUTCDay(); // 0=周日
   const mondayOffset = day === 0 ? 6 : day - 1;
-  const monday = new Date(now);
-  monday.setHours(0, 0, 0, 0);
-  monday.setDate(monday.getDate() - mondayOffset);
+  const mondayShifted = Date.UTC(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth(),
+    shifted.getUTCDate() - mondayOffset,
+  );
+  const monday = new Date(mondayShifted - BUS_TZ_OFFSET_MS);
   return { from: monday.toISOString(), to: now.toISOString() };
 }
 

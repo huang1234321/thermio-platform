@@ -1,28 +1,33 @@
 /**
- * 点位服务（modules M1-asset §3.4–§3.6）：跨层级检索/详情/语义白名单 PATCH/启停。
+ * 点位服务（modules M1-asset §3.4–§3.6 + §3.10）：跨层级检索/详情/语义白名单
+ * PATCH/启停/物理层编辑（DAT-151）。
  *
  * 纪律落点：
  * - 读侧全字段暴露（除 tenant_id，§2.4）；写侧四组分治：语义白名单本服务、启停专用
- *   端点本服务、物理层编辑 §3.10（DAT-151，本卡不接）、闸门 M8（IMPL-18）；
- * - 语义 PATCH 路由隔离守卫在控制器（point.field_not_allowed 400，details.allowed
- *   定向 M8/§3.10/§3.6）——本服务只收白名单内字段；
+ *   端点本服务、物理层编辑本服务（§3.10）、闸门 M8（IMPL-18）；
+ * - 语义/物理 PATCH 路由隔离守卫在控制器（point.field_not_allowed 400，details.allowed
+ *   定向 M8/§3.5/§3.6）——本服务只收白名单内字段；
  * - If-Match 弱校验（W/"<updated_at>"，ms 粒度比对）→ 失配 409 common.conflict；
  * - 启停重复置同态幂等 200（不 UPDATE——updated_at 不前进，仅日志，§5）；
  *   reason 必填入结构化日志（不入 config_audit，field 封闭集为闸门参数）；
  * - batch-status 207 逐项（整单不回滚，§8.3）；ids≤100 去重（schema 层）；
  * - 列表 latest 快照复用 IMPL-12 TSDB 只读仓储（DISTINCT ON 批量；无数据 → null）。
  */
+import { randomUUID } from 'node:crypto';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Logger } from 'pino';
 import type { PoolClient } from 'pg';
+import { Counter } from 'prom-client';
 import {
   QUANTITY_TYPES,
+  type OfflineAction,
   type Page,
   type Point,
   type PointBatchStatus,
   type PointBatchStatusItem,
   type PointDetail,
   type PointListItem,
+  type PointPhysicalPatch,
   type PointSearchQuery,
   type PointSemanticsPatch,
 } from '@thermio/shared-types';
@@ -34,6 +39,10 @@ import { TELEMETRY_STORE } from '../telemetry/telemetry.tokens.js';
 import { type TelemetryStore } from '../telemetry/tsdb-read.repository.js';
 import { TelemetryStoreUnavailableError } from '../telemetry/telemetry-store.error.js';
 import { AlarmEngineService } from '../alarm/alarm-engine.service.js';
+import { MetricsService } from '../infrastructure/metrics/metrics.service.js';
+import { buildConfigArtifact } from '../import/config-artifact.js';
+import { AcksExhaustedError, type DownChannel } from '../import/down-channel.publisher.js';
+import { DOWN_CHANNEL } from '../import/import.tokens.js';
 import {
   POINT_KEYSET_COLUMNS,
   decodeAssetCursor,
@@ -51,6 +60,7 @@ import {
   type BuildingScope,
 } from './asset-shared.js';
 import { loadEquipment } from './equipments.service.js';
+import { loadGateway } from './gateways.service.js';
 
 /** pg 行（bigint id → string；numeric → string|null；jsonb → object|null）。 */
 export interface PointRow {
@@ -94,11 +104,22 @@ export class PointsService {
     @Inject(LOGGER) rootLogger: Logger,
     @Inject(TELEMETRY_STORE) private readonly telemetry: TelemetryStore,
     @Inject(AlarmEngineService) private readonly alarmEngine: AlarmEngineService,
+    @Inject(DOWN_CHANNEL) private readonly downChannel: DownChannel,
+    private readonly metrics: MetricsService,
   ) {
     this.logger = rootLogger.child({ component: 'asset-points' });
+    this.configPushes = new Counter({
+      name: 'thermio_point_config_pushes_total',
+      help: '点位物理编辑触发的网关配置重推收敛结果（§3.10；复用 M2 §8.4 生产者，ack 送达可见性）',
+      labelNames: ['result'],
+      registers: [this.metrics.registry],
+    });
   }
 
   private readonly logger: Logger;
+
+  /** §3.10 配置重推收敛（result: ack_ok/ack_partial/ack_timeout/ack_failed/skipped_mqtt_disabled/push_failed）。 */
+  private readonly configPushes: Counter;
 
   /** GET /equipments/{equipment_id}/points（(raw_name,id) 升序 + latest 快照，§3.4）。 */
   async listByEquipment(
@@ -307,6 +328,257 @@ export class PointsService {
         fields: fields.map(([field]) => field),
       });
       return toPoint(requireRow(result.rows, 'point'));
+    });
+  }
+
+  /**
+   * PATCH /points/{point_id}/physical（§3.10，admin——能力键守卫在控制器；规格锚
+   * M1-asset §3.10 v1.2）。预检主面 + 索引兜底同构（M2 apply「双面」同款）：
+   * - 目标网关 load-for-user → 404；跨楼宇 → 422 asset.building_mismatch；
+   * - raw_name 唯一含停用点（索引无 status 过滤为刻意设计）；竞态窗由
+   *   point_gateway_raw_name_uidx 兜底映射同码（单行 UPDATE，索引即最终裁决）；
+   * - offline_action 引用命中 → 409 阻塞（ADR-003 硬指标 4：引用悬空 = 网关侧
+   *   忽略 → 安全写静默失效；两步修复路径见 details，先 PATCH /gateways/{id}）；
+   * - ref 联动改写同事务：raw_name 变更且未显式携带 protocol_address 且现值
+   *   ref === 旧名 → 改写（防矛盾配置推给网关）；显式携带 = 操作员意图，以显式为准；
+   * - 不裂史：point.id 不变（telemetry/审计史连续）；同值重复提交 200，
+   *   updated_at touch 幂等无害（ingest 配置缓存 ≤30s 增量收敛，DDL 触发器）。
+   */
+  async physicalPatch(
+    actor: AssetActor,
+    pointId: number,
+    body: PointPhysicalPatch,
+    ifMatch: string | undefined,
+  ): Promise<Point> {
+    const db = this.requireDb();
+    const outcome = await db.withTenant(actor.tenant_id, async (tx) => {
+      const row = await loadPoint(tx, actor, pointId);
+      assertIfMatch(ifMatch, row.updated_at);
+
+      const nextRawName = body.raw_name ?? row.raw_name;
+      const nextGatewayId = body.gateway_id ?? row.gateway_id;
+      const nextDirection = body.direction ?? (row.direction as Point['direction']);
+      const rawNameChanges = nextRawName !== row.raw_name;
+      const gatewayChanges = body.gateway_id !== undefined && body.gateway_id !== row.gateway_id;
+
+      // 网关迁移预检：目标网关 load-for-user（越权/不存在同 404）+ 同楼宇校验
+      if (body.gateway_id !== undefined && body.gateway_id !== row.gateway_id) {
+        const target = await loadGateway(tx, actor, body.gateway_id);
+        if (target.building_id !== row.building_id) {
+          throw new ReasonCodeException(
+            'asset.building_mismatch',
+            '迁移目标网关与点位不属于同一楼宇',
+            { point_building_id: row.building_id, gateway_building_id: target.building_id },
+          );
+        }
+      }
+
+      // 唯一性预检（含停用点；排除自身——同值重复提交幂等 200）
+      if (nextGatewayId !== null) {
+        await assertRawNameFree(tx, actor.tenant_id, nextGatewayId, nextRawName, row.id);
+      }
+
+      // offline_action 引用预检（仅 raw_name / gateway_id 变更时评估，当前所在网关）
+      if ((rawNameChanges || gatewayChanges) && row.gateway_id !== null) {
+        const refs = await offlineActionRefs(tx, actor.tenant_id, row.gateway_id, row.raw_name);
+        if (refs.length > 0) {
+          throw new ReasonCodeException(
+            'asset.offline_action_ref_conflict',
+            '点位被所在网关 offline_action 引用，先改 offline_action 再编辑（两步修复）',
+            { gateway_id: row.gateway_id, refs },
+          );
+        }
+      }
+
+      // ref 联动改写（§3.10）：现值形如 {"ref": <旧 raw_name>, ...} 时随 raw_name 前进
+      let protocolAddress: Record<string, unknown> | undefined = body.protocol_address;
+      if (
+        rawNameChanges &&
+        body.protocol_address === undefined &&
+        isRecord(row.protocol_address) &&
+        row.protocol_address['ref'] === row.raw_name
+      ) {
+        protocolAddress = { ...row.protocol_address, ref: nextRawName };
+      }
+
+      const sets: string[] = [];
+      const params: unknown[] = [];
+      const add = (column: string, value: unknown): void => {
+        params.push(value);
+        sets.push(`${column} = $${String(params.length)}`);
+      };
+      if (body.raw_name !== undefined) add('raw_name', nextRawName);
+      if (protocolAddress !== undefined) add('protocol_address', protocolAddress);
+      if (body.gateway_id !== undefined) add('gateway_id', nextGatewayId);
+      if (body.direction !== undefined) add('direction', nextDirection);
+      if (sets.length === 0) {
+        throw new ReasonCodeException('common.validation_failed', '至少提供一个物理层可更新字段');
+      }
+      params.push(actor.tenant_id, row.id);
+      const updated = await tx
+        .query<PointRow>(
+          `UPDATE point SET ${sets.join(', ')}
+           WHERE tenant_id = $${String(params.length - 1)} AND id = $${String(params.length)}
+           RETURNING ${SELECT_COLUMNS.replace(/\bp\./g, '')}`,
+          params,
+        )
+        .catch((error: unknown) => {
+          // 竞态兜底：预检后并发提交撞唯一索引 → 同码同 details（§3.10 双面同构）
+          if (isUniqueViolation(error) && nextGatewayId !== null) {
+            throw new ReasonCodeException(
+              'asset.duplicate_raw_name',
+              '同网关 raw_name 已被占用（含停用点）',
+              { gateway_id: nextGatewayId, raw_name: nextRawName },
+            );
+          }
+          throw error;
+        });
+
+      // 留痕（§3.10 同 §3.5/§3.6 口径）：结构化日志，不入 config_audit
+      this.logger.info({
+        msg: 'point_physical_updated',
+        tenant_id: actor.tenant_id,
+        building_id: row.building_id,
+        point_id: pointId,
+        actor: actor.user_id,
+        reason: body.reason,
+        changes: {
+          ...(body.raw_name !== undefined ? { raw_name: [row.raw_name, nextRawName] } : {}),
+          ...(protocolAddress !== undefined
+            ? { protocol_address: [row.protocol_address, protocolAddress] }
+            : {}),
+          ...(body.gateway_id !== undefined ? { gateway_id: [row.gateway_id, nextGatewayId] } : {}),
+          ...(body.direction !== undefined ? { direction: [row.direction, nextDirection] } : {}),
+        },
+      });
+      const pushGatewayIds = gatewayChanges
+        ? [...new Set([row.gateway_id, nextGatewayId].filter((id): id is string => id !== null))]
+        : nextGatewayId !== null
+          ? [nextGatewayId]
+          : [];
+      return { point: toPoint(requireRow(updated.rows, 'point physical')), pushGatewayIds };
+    });
+    // 提交后联动：配置重推（编辑已提交，推送结果不影响响应——见方法注释）
+    this.repushGatewayConfigs(actor.tenant_id, pointId, outcome.pushGatewayIds);
+    return outcome.point;
+  }
+
+  /**
+   * 配置重推（§3.10 提交后联动）：复用 M2 §8.4 生产者（buildConfigArtifact +
+   * DownChannel，与 apply 同一通道实例）；**不设 gateway_offline 同步预检**
+   * （区别于 apply 的 409 拦——单点修复场景 retained 在网关重连时自动收敛，
+   * 现场网关离线整改是常态路径）。fire-and-forget：ack（30s×3 退避）入结构化
+   * 日志与指标（送达可见性；显式重推端点与 O8 合并评估），编辑事务已提交，
+   * 推送不阻塞 HTTP 响应。
+   *
+   * job_id 语义（DAT-148 对接注记落码）：M2 §8.4 的 job_id 在 apply 语境 =
+   * 导入作业 id；本端点非 apply 触发 = **触发关联 id**（`physical-{point_id}-
+   * {uuid}`）——每次推送唯一，不与 apply 的应答等待器互串。
+   */
+  private repushGatewayConfigs(
+    tenantId: string,
+    pointId: number,
+    gatewayIds: readonly string[],
+  ): void {
+    for (const gatewayId of gatewayIds) {
+      const jobId = `physical-${String(pointId)}-${randomUUID()}`;
+      void this.pushGatewayConfig(tenantId, gatewayId, jobId).catch((err: unknown) => {
+        // 兜底：pushGatewayConfig 内部已分流 ack_*，此处仅收未预期异常
+        this.configPushes.inc({ result: 'push_failed' });
+        this.logger.error({
+          msg: 'config_push_crashed',
+          tenant_id: tenantId,
+          gateway_id: gatewayId,
+          job_id: jobId,
+          err,
+        });
+      });
+    }
+  }
+
+  private async pushGatewayConfig(
+    tenantId: string,
+    gatewayId: string,
+    jobId: string,
+  ): Promise<void> {
+    if (!this.downChannel.enabled) {
+      this.configPushes.inc({ result: 'skipped_mqtt_disabled' });
+      this.logger.warn({
+        msg: 'config_push_skipped',
+        tenant_id: tenantId,
+        gateway_id: gatewayId,
+        job_id: jobId,
+        reason: 'MQTT_BROKER_URL 未配置（dev 停用形态）',
+      });
+      return;
+    }
+    try {
+      const { artifact, gateway } = await this.buildGatewayArtifact(tenantId, gatewayId, jobId);
+      const ack = await this.downChannel.publishConfigAndWaitAck(gateway.mqtt_client_id, artifact);
+      if (ack.failed.length === 0) {
+        this.configPushes.inc({ result: 'ack_ok' });
+        this.logger.info({
+          msg: 'config_ack_ok',
+          tenant_id: tenantId,
+          gateway_id: gatewayId,
+          job_id: jobId,
+          ok_count: ack.ok_count,
+        });
+        return;
+      }
+      this.configPushes.inc({ result: 'ack_partial' });
+      this.logger.warn({
+        msg: 'config_ack_partial',
+        tenant_id: tenantId,
+        gateway_id: gatewayId,
+        job_id: jobId,
+        failed: ack.failed,
+      });
+    } catch (error) {
+      const result = error instanceof AcksExhaustedError ? 'ack_timeout' : 'ack_failed';
+      this.configPushes.inc({ result });
+      this.logger.warn({
+        msg: 'config_push_failed',
+        tenant_id: tenantId,
+        gateway_id: gatewayId,
+        job_id: jobId,
+        result,
+        err: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /** §8.4 全量快照产物（points = 本网关全部已注册点；不落库可重 derive）。 */
+  private async buildGatewayArtifact(
+    tenantId: string,
+    gatewayId: string,
+    jobId: string,
+  ): Promise<{
+    artifact: ReturnType<typeof buildConfigArtifact>;
+    gateway: { mqtt_client_id: string; offline_action: OfflineAction | null };
+  }> {
+    const db = this.requireDb();
+    return db.withTenant(tenantId, async (tx) => {
+      const gateway = requireRow(
+        (
+          await tx.query<{ mqtt_client_id: string; offline_action: OfflineAction | null }>(
+            `SELECT mqtt_client_id, offline_action FROM gateway WHERE tenant_id = $1 AND id = $2`,
+            [tenantId, gatewayId],
+          )
+        ).rows,
+        'gateway load',
+      );
+      const points = (
+        await tx.query<{ raw_name: string; unit_raw: string | null; unit_std: string | null }>(
+          `SELECT raw_name, unit_raw, unit_std FROM point
+           WHERE tenant_id = $1 AND gateway_id = $2 ORDER BY id`,
+          [tenantId, gatewayId],
+        )
+      ).rows;
+      return {
+        gateway,
+        artifact: buildConfigArtifact(jobId, points, gateway.offline_action ?? null),
+      };
     });
   }
 
@@ -563,4 +835,62 @@ async function assertGatewayVisible(
 
 function escapeLike(value: string): string {
   return value.replaceAll('%', '\\%').replaceAll('_', '\\_');
+}
+
+// ---------------------------------------------------------------------------
+// §3.10 物理层编辑辅助（预检 + 兜底映射；DAT-151）
+// ---------------------------------------------------------------------------
+
+/** 唯一性预检（含停用点——索引无 status 过滤为刻意设计；排除自身 = 同值幂等）。 */
+async function assertRawNameFree(
+  tx: PoolClient,
+  tenantId: string,
+  gatewayId: string,
+  rawName: string,
+  selfId: string,
+): Promise<void> {
+  const result = await tx.query(
+    `SELECT 1 FROM point
+     WHERE tenant_id = $1 AND gateway_id = $2 AND raw_name = $3 AND id <> $4`,
+    [tenantId, gatewayId, rawName, selfId],
+  );
+  if (result.rows.length > 0) {
+    throw new ReasonCodeException(
+      'asset.duplicate_raw_name',
+      '同网关 raw_name 已被占用（含停用点）',
+      {
+        gateway_id: gatewayId,
+        raw_name: rawName,
+      },
+    );
+  }
+}
+
+/** 网关 offline_action.writes[] 中引用指定 raw_name 的项（§3.10 阻塞面清单）。 */
+async function offlineActionRefs(
+  tx: PoolClient,
+  tenantId: string,
+  gatewayId: string,
+  rawName: string,
+): Promise<Array<{ raw_name: string; value: number }>> {
+  const result = await tx.query<{ offline_action: OfflineAction | null }>(
+    `SELECT offline_action FROM gateway WHERE tenant_id = $1 AND id = $2`,
+    [tenantId, gatewayId],
+  );
+  const writes = result.rows[0]?.offline_action?.writes ?? [];
+  return writes.filter((write) => write.raw_name === rawName);
+}
+
+/** jsonb 列（pg 已解析）形知收窄：非空 plain object（数组/标量不是 loose 对象）。 */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === '23505'
+  );
 }

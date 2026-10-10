@@ -48,6 +48,9 @@ describe('reason_code registry snapshot', () => {
         "alarm.suppress_duration_invalid": {
           "http": 422,
         },
+        "asset.building_mismatch": {
+          "http": 422,
+        },
         "asset.building_type_unknown": {
           "http": 422,
         },
@@ -62,6 +65,9 @@ describe('reason_code registry snapshot', () => {
         },
         "asset.not_found": {
           "http": 404,
+        },
+        "asset.offline_action_ref_conflict": {
+          "http": 409,
         },
         "asset.system_type_unknown": {
           "http": 422,

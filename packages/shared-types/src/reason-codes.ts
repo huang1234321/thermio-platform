@@ -129,6 +129,12 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  * - import.apply_conflict（409，apply 同步预检主面 + 登记事务内竞态兜底，details.conflicts）；
  * - import.unit_conversion_unsupported（422，PATCH 即时校验 + apply 复核双面）；
  * - import.selfcheck_not_ready（404，details.reason ∈ {never_run, in_progress}）。
+ *
+ * 九批注册（DAT-151，点位物理层编辑，modules M1-asset.md §1.2 v1.2 增量两码逐字）：
+ * - asset.building_mismatch（422，§3.10 迁移目标网关与点位不同楼宇——与
+ *   import.building_mismatch 422 同语义、域分离）；
+ * - asset.offline_action_ref_conflict（409，§3.10 更名/迁移命中所在网关
+ *   offline_action.writes[].raw_name 引用——ADR-003 硬指标 4 安全锚，阻塞不警告）。
  */
 export const REASON_CODES = [
   'common.validation_failed',
@@ -149,6 +155,8 @@ export const REASON_CODES = [
   'role.unknown',
   'asset.not_found',
   'asset.duplicate_raw_name',
+  'asset.building_mismatch',
+  'asset.offline_action_ref_conflict',
   'asset.building_type_unknown',
   'asset.system_type_unknown',
   'asset.equipment_type_unknown',
@@ -319,7 +327,19 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
   'asset.duplicate_raw_name': {
     domain: 'asset',
     http: 409,
-    description: '资产域原始名重复（唯一性冲突）',
+    description: '资产域原始名重复（唯一性冲突；M2 apply 预检/兜底 + M1 物理编辑 §3.10 同构双面）',
+  },
+  'asset.building_mismatch': {
+    domain: 'asset',
+    http: 422,
+    description:
+      '物理编辑迁移目标网关与点位不同楼宇（§3.10，details: {point_building_id, gateway_building_id}；与 import.building_mismatch 同语义、域分离）',
+  },
+  'asset.offline_action_ref_conflict': {
+    domain: 'asset',
+    http: 409,
+    description:
+      '物理编辑（更名/迁移网关）命中所在网关 offline_action.writes[].raw_name 引用（§3.10，details.refs 清单；ADR-003 硬指标 4 安全锚——阻塞不警告，两步修复：先改 offline_action 再编辑）',
   },
   'asset.building_type_unknown': {
     domain: 'asset',

@@ -28,7 +28,8 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
  * IMPL-11 增量（M7-auth §4.1 定稿键名逐字，M1-asset §1.5 v1.1 对齐）：
  * assets.write / points.semantics.write / points.status.write / gateways.manage
  * ——IMPL-10（/me 下发）与 IMPL-11（@RequireCapabilities）同源消费本目录。
- * points.physical.write（§3.10，R17 定稿）随 DAT-151 落码注册，本批不含。
+ * DAT-151 增量：points.physical.write（§3.10 物理编辑，R17 定稿键名逐字——
+ * 物理身份是采集与控制锚，admin 不下放，与启停同级）。
  *
  * IMPL-13 增量（M7-auth §4.1 定稿键名逐字，M4-alarm.md §1.5）：
  * alarms.ack（operator+）/ alarms.suppress（admin）/ alarm_rules.write（admin）。
@@ -53,6 +54,7 @@ export const CAPABILITIES = [
   'assets.write',
   'points.semantics.write',
   'points.status.write',
+  'points.physical.write',
   'gateways.manage',
   'imports.read',
   'imports.write',
@@ -114,6 +116,7 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'alarm_rules.write',
     'assets.write',
     'points.status.write',
+    'points.physical.write',
     'gateways.manage',
     'control.write',
     'users.manage',

@@ -39,6 +39,14 @@ describe('weeklySamplePreset（§5.2 S3 采样预设）', () => {
     const preset = weeklySamplePreset(new Date('2026-10-04T20:00:00+08:00')); // 周日
     expect(Date.parse(preset.from)).toBe(Date.parse('2026-09-28T00:00:00+08:00'));
   });
+
+  // 回归护栏（main CI UTC runner 3 例失败的负例）：周一 07:00+08 = UTC 周日 23:00，
+  // 按本地时区取整会误回退到上一周；锚定 +08 后仍取本周一零点。
+  it('周一 07:00+08（UTC 机器的周日 23:00）→ 不误回上周', () => {
+    const preset = weeklySamplePreset(new Date('2026-09-28T07:00:00+08:00'));
+    expect(Date.parse(preset.from)).toBe(Date.parse('2026-09-28T00:00:00+08:00'));
+    expect(Date.parse(preset.to)).toBe(Date.parse('2026-09-28T07:00:00+08:00'));
+  });
 });
 
 describe('hitRateText（§4.5 reviewed=0 → null →「—」）', () => {

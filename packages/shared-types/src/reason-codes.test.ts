@@ -44,7 +44,9 @@ describe('reason_code registry', () => {
     //   → 新五码 + 溢出/超时两子码；overview §4 M8 码列 point.* 七码注册）。
     // + IMPL-16 切片三码（DAT-212，M6-fdd.md §4.6：fdd.finding_not_found /
     //   fdd.report_not_found / fdd.state_invalid——前二为既有草案码机械映射转正注册）。
-    expect(REASON_CODES).toHaveLength(78);
+    // + DAT-151 两码（M1-asset §1.2 v1.2：asset.building_mismatch（422）/
+    //   asset.offline_action_ref_conflict（409）——§3.10 物理层编辑）。
+    expect(REASON_CODES).toHaveLength(80);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

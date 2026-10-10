@@ -1,13 +1,15 @@
 /**
- * 点位端点（modules M1-asset §3.4–§3.6）：
+ * 点位端点（modules M1-asset §3.4–§3.6 + §3.10）：
  * - GET /equipments/{id}/points（列表 + latest 快照）、GET /points（跨层级检索）、
  *   GET /points/{id}（详情 + 面包屑）；
  * - PATCH /points/{id}（语义白名单，operator+，可选 If-Match）；
- * - PATCH /points/{id}/status + POST /points/batch-status（启停，admin）。
+ * - PATCH /points/{id}/status + POST /points/batch-status（启停，admin）；
+ * - PATCH /points/{id}/physical（物理白名单四字段，admin + reason 必填，可选
+ *   If-Match——§3.10 DAT-151）。
  *
- * **路由隔离守卫（IMPL-11 验收锚点，§3.5）**：语义 PATCH 含白名单外字段 →
- * 400 `point.field_not_allowed`（details.allowed 列白名单）——闸门字段定向 M8、
- * 物理层字段定向 §3.10（DAT-151）、status 定向 §3.6，其余 v1 无编辑路径。
+ * **路由隔离守卫（IMPL-11 验收锚点，§3.5/§3.10）**：语义/物理 PATCH 含白名单外
+ * 字段 → 400 `point.field_not_allowed`（details.allowed 列各自白名单）——闸门
+ * 字段定向 M8、语义字段定向 §3.5、status 定向 §3.6，其余 v1 无编辑路径。
  * 键层收窄必须先于 schema 校验（strict 会把白名单外键归入 422，语义不符）。
  */
 import {
@@ -26,8 +28,10 @@ import {
 import { z } from 'zod';
 import {
   EquipmentPointsQuerySchema,
+  POINT_PHYSICAL_FIELDS,
   POINT_SEMANTIC_FIELDS,
   PointBatchStatusSchema,
+  PointPhysicalPatchSchema,
   PointSearchQuerySchema,
   PointSemanticsPatchSchema,
   PointStatusPatchSchema,
@@ -37,6 +41,7 @@ import {
   type PointBatchStatusResponse,
   type PointDetail,
   type PointListItem,
+  type PointPhysicalPatch,
   type PointSearchQuery,
   type PointSemanticsPatch,
 } from '@thermio/shared-types';
@@ -56,6 +61,9 @@ import { actor } from './buildings.controller.js';
 const PointIdParam = z.coerce.number().int().positive();
 
 const SEMANTIC_WHITELIST = new Set<string>(POINT_SEMANTIC_FIELDS);
+/** §3.10 物理白名单 + reason（元数据键，非可更新字段——守卫放行但 details.allowed 不列）。 */
+const PHYSICAL_WHITELIST = new Set<string>([...POINT_PHYSICAL_FIELDS, 'reason']);
+const PHYSICAL_FIELDS = new Set<string>(POINT_PHYSICAL_FIELDS);
 
 @Controller()
 @UseGuards(CapabilitiesGuard)
@@ -114,6 +122,19 @@ export class PointsController {
     return this.points.semanticsPatch(actor(auth), pointId, body, ifMatch);
   }
 
+  @Patch('points/:pointId/physical')
+  @RequireCapabilities('points.physical.write')
+  async physicalPatch(
+    @Param('pointId', new ZodValidationPipe(PointIdParam)) pointId: number,
+    @Headers('if-match') ifMatch: string | undefined,
+    @Body() raw: unknown,
+    @CurrentAuth() auth: AuthContext | undefined,
+  ): Promise<Point> {
+    guardPhysicalWhitelist(raw);
+    const body = parsePhysicalPatch(raw);
+    return this.points.physicalPatch(actor(auth), pointId, body, ifMatch);
+  }
+
   @Patch('points/:pointId/status')
   @RequireCapabilities('points.status.write')
   async statusPatch(
@@ -165,6 +186,41 @@ function guardSemanticWhitelist(raw: unknown): void {
 /** 白名单内键的值校验（类型/长度 → 422，全局过滤器归一 ZodError 同款 details）。 */
 function parseSemanticsPatch(raw: unknown): PointSemanticsPatch {
   const result = PointSemanticsPatchSchema.safeParse(raw);
+  if (!result.success) {
+    throw new ReasonCodeException(
+      'common.validation_failed',
+      '请求参数校验失败',
+      zodFieldIssues(result.error),
+    );
+  }
+  return result.data;
+}
+
+/**
+ * §3.10 路由隔离守卫：白名单外**键** → 400 point.field_not_allowed（details.allowed
+ * 列物理白名单四字段）。语义五字段/status/闸门字段误投本端点在此统一拦截定向。
+ */
+function guardPhysicalWhitelist(raw: unknown): void {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new ReasonCodeException('common.validation_failed', '请求体必须是对象', {
+      '(root)': '期望 JSON 对象',
+    });
+  }
+  const offending = Object.keys(raw).filter((key) => !PHYSICAL_WHITELIST.has(key));
+  if (offending.length > 0) {
+    throw new ReasonCodeException('point.field_not_allowed', '字段不属于物理层编辑白名单', {
+      allowed: [...POINT_PHYSICAL_FIELDS],
+      fields: offending,
+    });
+  }
+  const hasPhysicalField = Object.keys(raw).some((key) => PHYSICAL_FIELDS.has(key));
+  if (!hasPhysicalField) {
+    throw new ReasonCodeException('common.validation_failed', '至少提供一个物理层可更新字段');
+  }
+}
+
+function parsePhysicalPatch(raw: unknown): PointPhysicalPatch {
+  const result = PointPhysicalPatchSchema.safeParse(raw);
   if (!result.success) {
     throw new ReasonCodeException(
       'common.validation_failed',

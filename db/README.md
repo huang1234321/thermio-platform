@@ -35,7 +35,7 @@ CI：`.github/workflows/db-migration-smoke.yml`（compose 外的一次性干净 
 
    ```bash
    goose -dir db/migrations/pg postgres \
-     "postgres://<superuser>:<pw>@<host>:<port>/thermio?sslmode=disable&options=-c role=thermio_owner" up
+     "postgres://<superuser>:<pw>@<host>:<port>/thermio?sslmode=disable&options=-c%20role%3Dthermio_owner" up
    ```
 
    `options=-c role=thermio_owner` 让会话建立即 `SET ROLE`：对象 OWNER 归 `thermio_owner`，FORCE RLS 对 owner 生效（ddl.md §8 用例 6）。

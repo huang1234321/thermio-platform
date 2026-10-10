@@ -15,6 +15,7 @@ import {
   GatewayUpdateSchema,
   OfflineActionSchema,
   PointBatchStatusSchema,
+  PointPhysicalPatchSchema,
   PointSearchQuerySchema,
   PointStatusPatchSchema,
   RatedParamsSchema,
@@ -154,5 +155,63 @@ describe('资产域请求 schema（M1-asset §3）', () => {
     expect(PointSearchQuerySchema.safeParse({ building_name: 'x' }).success).toBe(false);
     expect(PointSearchQuerySchema.safeParse({ limit: 201 }).success).toBe(false);
     expect(PointSearchQuerySchema.safeParse({}).success).toBe(true); // limit 默认 50
+  });
+});
+
+describe('物理层 PATCH schema（M1-asset §3.10，DAT-151）', () => {
+  it('shouldTrimRawName_beforeLengthChecks', () => {
+    const parsed = PointPhysicalPatchSchema.safeParse({ raw_name: '  CHW.T01  ', reason: 'r' });
+    expect(parsed.success).toBe(true);
+    if (parsed.success) expect(parsed.data.raw_name).toBe('CHW.T01');
+    expect(PointPhysicalPatchSchema.safeParse({ raw_name: '   ', reason: 'r' }).success).toBe(
+      false,
+    ); // trim 后空 → 422
+    expect(
+      PointPhysicalPatchSchema.safeParse({ raw_name: 'x'.repeat(129), reason: 'r' }).success,
+    ).toBe(false);
+  });
+
+  it('shouldRejectGatewayIdNull_with422_notNullable', () => {
+    expect(PointPhysicalPatchSchema.safeParse({ gateway_id: null, reason: 'r' }).success).toBe(
+      false,
+    ); // 不可置 null（§3.10：v1 注册来源仅 mqtt_gateway）
+  });
+
+  it('shouldRejectProtocolAddress_nonObject_orOver4KB', () => {
+    expect(
+      PointPhysicalPatchSchema.safeParse({ protocol_address: { ref: 'a' }, reason: 'r' }).success,
+    ).toBe(true);
+    // 非对象（数组/字符串/null）→ 422
+    expect(
+      PointPhysicalPatchSchema.safeParse({ protocol_address: ['x'], reason: 'r' }).success,
+    ).toBe(false);
+    expect(PointPhysicalPatchSchema.safeParse({ protocol_address: 'x', reason: 'r' }).success).toBe(
+      false,
+    );
+    expect(
+      PointPhysicalPatchSchema.safeParse({ protocol_address: null, reason: 'r' }).success,
+    ).toBe(false);
+    // 超 4KB（loose schema 上限）
+    const big = { pad: 'x'.repeat(4096) };
+    expect(PointPhysicalPatchSchema.safeParse({ protocol_address: big, reason: 'r' }).success).toBe(
+      false,
+    );
+  });
+
+  it('shouldRejectDirectionOutsideEnum_andRequireReason', () => {
+    expect(
+      PointPhysicalPatchSchema.safeParse({ direction: 'readwrite', reason: 'r' }).success,
+    ).toBe(true);
+    expect(PointPhysicalPatchSchema.safeParse({ direction: 'rw', reason: 'r' }).success).toBe(
+      false,
+    );
+    // reason 必填 1..512（缺失/空/超长）
+    expect(PointPhysicalPatchSchema.safeParse({ direction: 'read' }).success).toBe(false);
+    expect(PointPhysicalPatchSchema.safeParse({ direction: 'read', reason: '' }).success).toBe(
+      false,
+    );
+    expect(
+      PointPhysicalPatchSchema.safeParse({ direction: 'read', reason: 'x'.repeat(513) }).success,
+    ).toBe(false);
   });
 });

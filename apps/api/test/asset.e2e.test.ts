@@ -7,7 +7,10 @@
  * - 白名单外字段 400 point.field_not_allowed（闸门字段定向 M8、物理字段定向 §3.10、
  *   status 定向 §3.6 双向）；
  * - reason 缺失 422、重复置同态幂等 200、batch 207 部分失败；
- * - local_id 重复 409（R3 应用层校验）；检索白名单外参数 422（API-DSN-04）。
+ * - local_id 重复 409（R3 应用层校验）；检索白名单外参数 422（API-DSN-04）；
+ * - §3.10 物理编辑（DAT-151）：duplicate_raw_name 含停用点 / building_mismatch /
+ *   offline_action_ref_conflict 两步修复 e2e / If-Match 失配 / gateway_id 置 null /
+ *   disabled 点可编辑 / admin 专属能力键。
  */
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import request from 'supertest';
@@ -34,6 +37,10 @@ interface AssetSeed {
   equipmentId: string;
   gatewayId: string;
   pointIds: { temp: number; pump: number; spare: number };
+  /** §3.10 专用：同楼宇迁移目标网关 / 跨楼宇网关 / 物理编辑三点（DAT-151）。 */
+  gatewayA2Id: string;
+  gatewayCrossId: string;
+  physicalIds: { rename: number; occupant: number; disabled: number };
 }
 let seed: AssetSeed;
 
@@ -657,6 +664,217 @@ skipped('asset e2e：楼宇/系统/设备/点位（IMPL-11 验收要点）', () 
     });
   });
 
+  describe('点位物理层编辑（§3.10，DAT-151 验收锚点）', () => {
+    const physical = (pointId: number, token = adminToken): request.Test =>
+      authed('patch', `/api/v1/points/${String(pointId)}/physical`, token);
+
+    it('shouldRenamePoint_withRefLinkageRewrite_andIdempotentResubmit', async () => {
+      const before = await authed(
+        'get',
+        `/api/v1/points/${String(seed.physicalIds.rename)}`,
+        adminToken,
+      );
+      const response = await physical(seed.physicalIds.rename).send({
+        raw_name: 'PHYS.REN.2',
+        reason: '点表错误原地修正',
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.raw_name).toBe('PHYS.REN.2');
+      // ref 联动改写（§3.10）：现值 ref===旧名且未显式携带 → 同事务前进
+      expect(response.body.protocol_address).toEqual({ ref: 'PHYS.REN.2', source: 'import' });
+      expect(new Date(response.body.updated_at).getTime()).toBeGreaterThan(
+        new Date(before.body.updated_at).getTime(),
+      );
+
+      // 同值重复提交 200（updated_at touch 幂等无害）
+      const resubmit = await physical(seed.physicalIds.rename).send({
+        raw_name: 'PHYS.REN.2',
+        reason: '重复提交',
+      });
+      expect(resubmit.status).toBe(200);
+      expect(resubmit.body.raw_name).toBe('PHYS.REN.2');
+    });
+
+    it('shouldRejectDuplicateRawName_includingDisabledPoints_with409_details', async () => {
+      const response = await physical(seed.physicalIds.occupant).send({
+        raw_name: 'PHYS.DIS', // 停用点占用的名字——唯一性含停用点（索引无 status 过滤）
+        reason: '撞名',
+      });
+      expect(response.status).toBe(409);
+      expect(response.body.error.reason_code).toBe('asset.duplicate_raw_name');
+      expect(response.body.error.details).toEqual({
+        gateway_id: seed.gatewayId,
+        raw_name: 'PHYS.DIS',
+      });
+    });
+
+    it('shouldRejectCrossBuildingMigration_with422_bothBuildingIds', async () => {
+      const response = await physical(seed.physicalIds.occupant).send({
+        gateway_id: seed.gatewayCrossId,
+        reason: '跨楼迁移',
+      });
+      expect(response.status).toBe(422);
+      expect(response.body.error.reason_code).toBe('asset.building_mismatch');
+      expect(response.body.error.details).toEqual({
+        point_building_id: world.buildingA1,
+        gateway_building_id: world.buildingA2,
+      });
+
+      const ghost = await physical(seed.physicalIds.occupant).send({
+        gateway_id: '123e4567-e89b-42d3-a456-426614174199',
+        reason: '幽灵网关',
+      });
+      expect(ghost.status).toBe(404);
+      expect(ghost.body.error.reason_code).toBe('gateway.not_found');
+    });
+
+    it('shouldBlockOfflineActionRef_with409_thenSucceedViaTwoStepFix', async () => {
+      // 引用点位的当前名 → 更名即断链安全写（ADR-003 硬指标 4：阻塞不警告）
+      const refSet = await authed('patch', `/api/v1/gateways/${seed.gatewayId}`, adminToken).send({
+        offline_action: { writes: [{ raw_name: 'PHYS.OCC', value: 1 }] },
+      });
+      expect(refSet.status).toBe(200);
+
+      const blocked = await physical(seed.physicalIds.occupant).send({
+        raw_name: 'PHYS.OCC.2',
+        reason: '更名',
+      });
+      expect(blocked.status).toBe(409);
+      expect(blocked.body.error.reason_code).toBe('asset.offline_action_ref_conflict');
+      expect(blocked.body.error.details).toEqual({
+        gateway_id: seed.gatewayId,
+        refs: [{ raw_name: 'PHYS.OCC', value: 1 }],
+      });
+
+      // 两步修复（§3.10 修复路径）：先改 offline_action 引用，再回本端点更名
+      const step1 = await authed('patch', `/api/v1/gateways/${seed.gatewayId}`, adminToken).send({
+        offline_action: { writes: [{ raw_name: 'PHYS.OCC.2', value: 1 }] },
+      });
+      expect(step1.status).toBe(200);
+      const step2 = await physical(seed.physicalIds.occupant).send({
+        raw_name: 'PHYS.OCC.2',
+        reason: '两步修复第二步',
+      });
+      expect(step2.status).toBe(200);
+      expect(step2.body.raw_name).toBe('PHYS.OCC.2');
+
+      // 收尾清引用，后续迁移用例不受网关 offline_action 影响
+      await authed('patch', `/api/v1/gateways/${seed.gatewayId}`, adminToken).send({
+        offline_action: null,
+      });
+    });
+
+    it('shouldMigrateGateway_withinSameBuilding', async () => {
+      const response = await physical(seed.physicalIds.occupant).send({
+        gateway_id: seed.gatewayA2Id,
+        reason: '迁移到网关A2',
+      });
+      expect(response.status).toBe(200);
+      expect(response.body.gateway_id).toBe(seed.gatewayA2Id);
+    });
+
+    it('shouldEditDisabledPoint_O2ReliefPath', async () => {
+      const response = await physical(seed.physicalIds.disabled).send({
+        direction: 'readwrite',
+        reason: '停用态物理修复（复启前）',
+      });
+      expect(response.status).toBe(200); // disabled 可编辑（O2 主救济路径时序）
+      expect(response.body.status).toBe('disabled'); // 物理编辑不触碰 status
+      expect(response.body.direction).toBe('readwrite');
+    });
+
+    it('shouldEnforceIfMatch_onPhysicalPatch_with409', async () => {
+      const current = await authed(
+        'get',
+        `/api/v1/points/${String(seed.physicalIds.rename)}`,
+        adminToken,
+      );
+      const response = await physical(seed.physicalIds.rename)
+        .set('If-Match', 'W/"2020-01-01T00:00:00.000Z"')
+        .send({ raw_name: 'PHYS.REN.3', reason: '旧锚' });
+      expect(response.status).toBe(409);
+      expect(response.body.error.reason_code).toBe('common.conflict');
+      expect(response.body.error.details).toMatchObject({
+        current_updated_at: String(current.body.updated_at),
+      });
+    });
+
+    it('shouldRejectMalformedValues_with422_gatewayNullDirectionEnumBlankRawName', async () => {
+      for (const body of [
+        { gateway_id: null, reason: '置空' }, // 不可置 null（§3.10）
+        { direction: 'rw', reason: '值域外' },
+        { raw_name: '   ', reason: 'trim 后空' },
+        { raw_name: 'x'.repeat(129), reason: '超长' },
+        { raw_name: 'PHYS.X' }, // reason 缺失
+        { reason: '只有理由没有物理字段' },
+      ]) {
+        const response = await physical(seed.physicalIds.rename).send(body);
+        expect(response.status).toBe(422);
+        expect(response.body.error.reason_code).toBe('common.validation_failed');
+      }
+    });
+
+    it('shouldGuardRouteIsolation_semanticAndStatusFields_with400', async () => {
+      const semantic = await physical(seed.physicalIds.rename).send({
+        display_name: 'x',
+        reason: '误投语义字段',
+      });
+      expect(semantic.status).toBe(400);
+      expect(semantic.body.error.reason_code).toBe('point.field_not_allowed');
+      expect(semantic.body.error.details.allowed).toEqual([
+        'raw_name',
+        'gateway_id',
+        'protocol_address',
+        'direction',
+      ]);
+      expect(semantic.body.error.details.fields).toContain('display_name');
+
+      const status = await physical(seed.physicalIds.rename).send({
+        status: 'disabled',
+        reason: '误投 status',
+      });
+      expect(status.status).toBe(400);
+      expect(status.body.error.reason_code).toBe('point.field_not_allowed');
+    });
+
+    it('shouldRejectOperatorAndViewer_with403_adminOnlyCapability', async () => {
+      for (const token of [operatorToken, viewerToken]) {
+        const response = await physical(seed.physicalIds.rename, token).send({
+          raw_name: 'PHYS.REN.9',
+          reason: '越权',
+        });
+        expect(response.status).toBe(403);
+        expect(response.body.error.reason_code).toBe('auth.forbidden');
+      }
+    });
+
+    it('shouldReturnIdentical404_forGhost_andCrossTenantPoint', async () => {
+      const ghost = await physical(999_999_997, adminToken).send({
+        raw_name: 'X',
+        reason: '幽灵点',
+      });
+      expect(ghost.status).toBe(404);
+      expect(ghost.body.error.reason_code).toBe('asset.not_found');
+      const cross = await physical(seed.physicalIds.rename, adminBToken).send({
+        raw_name: 'X',
+        reason: '跨租户',
+      });
+      expect(cross.status).toBe(404);
+      expect(cross.body.error.message).toBe(ghost.body.error.message); // SEC-AZ-03 同文案
+    });
+
+    it('shouldGrantPhysicalCapability_toAdminOnly_inMeCatalog', async () => {
+      const me = await request(app.getHttpServer())
+        .get('/api/v1/me')
+        .set('Authorization', `Bearer ${adminToken}`);
+      expect(me.body.capabilities).toContain('points.physical.write');
+      const operatorMe = await request(app.getHttpServer())
+        .get('/api/v1/me')
+        .set('Authorization', `Bearer ${operatorToken}`);
+      expect(operatorMe.body.capabilities).not.toContain('points.physical.write');
+    });
+  });
+
   describe('跨租户点位（SEC-AZ-03 汇总）', () => {
     it('shouldReturnIdentical404_forPointGet_semantics_andStatus', async () => {
       const ghost = await authed('get', '/api/v1/points/999999998', adminToken);
@@ -713,12 +931,46 @@ async function seedAssets(): Promise<AssetSeed> {
       const temp = await point('CHW.ST01.TEMP', 'chw_supply_temp', equipmentId);
       const pump = await point('CHW.P01.RUN', 'run_status', equipmentId);
       const spare = await point('CHW.SPARE', null, null);
+      // §3.10 种子（DAT-151）：同楼宇第二网关 + 跨楼宇网关 + 物理编辑三点
+      //（occupant 名字被占位 / disabled 点默认停用——含停用点唯一性断言用）。
+      const gatewayA2 = await client.query<{ id: string }>(
+        `INSERT INTO gateway (tenant_id, building_id, name, serial, mqtt_client_id)
+         VALUES ($1, $2, 'E2E 网关A2', 'E2EGW002', 'gw-E2EGW002') RETURNING id`,
+        [world.tenantA, world.buildingA1],
+      );
+      const gatewayA2Id = requireSeedId(gatewayA2);
+      const gatewayCross = await client.query<{ id: string }>(
+        `INSERT INTO gateway (tenant_id, building_id, name, serial, mqtt_client_id)
+         VALUES ($1, $2, 'E2E 跨楼网关', 'E2EGW003', 'gw-E2EGW003') RETURNING id`,
+        [world.tenantA, world.buildingA2],
+      );
+      const gatewayCrossId = requireSeedId(gatewayCross);
+      const physicalPoint = async (
+        rawName: string,
+        status: 'active' | 'disabled' = 'active',
+      ): Promise<number> => {
+        const result = await client.query<{ id: string }>(
+          `INSERT INTO point (tenant_id, building_id, source_type, gateway_id, raw_name,
+                              protocol_address, quantity_type, direction, status)
+           VALUES ($1, $2, 'mqtt_gateway', $3, $4,
+                   jsonb_build_object('ref', $4::text, 'source', 'import'), 'chw_supply_temp', 'read', $5)
+           RETURNING id`,
+          [world.tenantA, world.buildingA1, gatewayId, rawName, status],
+        );
+        return Number(requireSeedId(result));
+      };
+      const rename = await physicalPoint('PHYS.REN');
+      const occupant = await physicalPoint('PHYS.OCC');
+      const disabled = await physicalPoint('PHYS.DIS', 'disabled');
       await client.query('COMMIT');
       return {
         systemId,
         equipmentId,
         gatewayId,
         pointIds: { temp, pump, spare },
+        gatewayA2Id,
+        gatewayCrossId,
+        physicalIds: { rename, occupant, disabled },
       };
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);

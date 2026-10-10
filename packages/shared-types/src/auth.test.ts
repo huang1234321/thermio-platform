@@ -45,6 +45,10 @@ describe('capability catalog（SEC-AZ-05）', () => {
     expect(operator.has('control.write')).toBe(false);
     expect(operator.has('imports.write')).toBe(true);
     expect(viewer.has('imports.write')).toBe(false);
+    // §3.10 物理编辑（DAT-151/R17）：物理身份是采集与控制锚，admin 不下放（与启停同级）
+    expect(admin.has('points.physical.write')).toBe(true);
+    expect(operator.has('points.physical.write')).toBe(false);
+    expect(viewer.has('points.physical.write')).toBe(false);
   });
 
   it('shouldAnswerDerivation_forEveryMvpRole', () => {

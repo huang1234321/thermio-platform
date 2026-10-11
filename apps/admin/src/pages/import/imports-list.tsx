@@ -1,8 +1,10 @@
 /**
  * 导入历史页 /imports（M2-import §10.3；原型「导入历史」屏）：
  * GET /imports 列表（状态筛选 + 状态/行数/命中率列）+ 状态机徽标；行点击 → /imports/:id
- * （向导恢复态或报告态合一）；游标分页「加载更多 + 已加载计数」（§3.1，DAT-157 修单）；
- * 列表时间相对显示（§2.2，hover 完整时间戳）；发起按钮显隐 = imports.write。
+ * （向导恢复态或报告态合一）；游标分页「加载更多 + 已加载计数」（§3.1，DAT-157 修单；
+ * 计数直接渲染 items.length，不设冗余 total state——DAT-210）；列表时间相对显示
+ * （§2.2，hover 完整时间戳）；加载失败报错位置随数据态（§5.4，DAT-210：已保留
+ * 数据时收窄到列表底部按钮区，无数据时页级）；发起按钮显隐 = imports.write。
  */
 import { Alert, Button, Card, Empty, Select, Space, Spin, Table, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
@@ -23,7 +25,6 @@ export function ImportsListPage(): React.ReactNode {
   const navigate = useNavigate();
   const [items, setItems] = useState<ImportJob[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ImportJobStatus | undefined>(undefined);
@@ -36,9 +37,6 @@ export function ImportsListPage(): React.ReactNode {
         if (nextCursor !== undefined && nextCursor.length > 0) params.set('cursor', nextCursor);
         const result = await apiFetch(`/imports?${params.toString()}`, ImportJobListResponseSchema);
         setItems((prev) => (nextCursor === undefined ? result.items : [...prev, ...result.items]));
-        setTotal((prev) =>
-          nextCursor === undefined ? result.items.length : (prev ?? 0) + result.items.length,
-        );
         setCursor(result.next_cursor);
         setError(null);
       } catch {
@@ -84,11 +82,9 @@ export function ImportsListPage(): React.ReactNode {
             ＋ 新建导入（向导）
           </Button>
         )}
-        {total !== null && (
-          <Typography.Text type="secondary">已加载 {String(items.length)} 条</Typography.Text>
-        )}
+        <Typography.Text type="secondary">已加载 {String(items.length)} 条</Typography.Text>
       </Space>
-      {error !== null && <Alert type="error" showIcon message={error} />}
+      {error !== null && items.length === 0 && <Alert type="error" showIcon message={error} />}
       <Card title="导入历史">
         {loading ? (
           <Spin />
@@ -153,6 +149,9 @@ export function ImportsListPage(): React.ReactNode {
               },
             ]}
           />
+        )}
+        {error !== null && items.length > 0 && (
+          <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />
         )}
         {cursor !== null && (
           <Button

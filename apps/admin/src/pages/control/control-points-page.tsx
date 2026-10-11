@@ -6,7 +6,9 @@
  * - 列（§3.2）：点位（display_name + raw_name 副行 + 停用徽标）/ 设备·系统 /
  *   模式（+熔断降级徽标）/ 白名单 / 值域（空 = 数据不完整黄点）/ 频率 / 操作；
  * - 行操作「编辑闸门」「切换模式」仅 control.write 渲染（SEC-AZ-05 不置灰）；
- * - 游标 + 加载更多（API-DSN-03 默认 50）。
+ * - 游标 + 加载更多（API-DSN-03 默认 50）；已加载计数直接渲染 rows.length，不设
+ *   冗余 total state（DAT-210）；加载失败报错位置随数据态（§5.4，DAT-210：已保留
+ *   数据时收窄到列表底部按钮区，无数据时页级）。
  */
 import { Alert, Badge, Button, Card, Input, Select, Space, Table, Typography } from 'antd';
 import { useCallback, useEffect, useState } from 'react';
@@ -25,7 +27,6 @@ export function ControlPointsPage(): React.ReactNode {
 
   const [rows, setRows] = useState<readonly ControlPointItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<string | undefined>(undefined);
@@ -53,9 +54,6 @@ export function ControlPointsPage(): React.ReactNode {
         );
         setRows((prev) =>
           nextCursor === undefined ? response.items : [...prev, ...response.items],
-        );
-        setTotal((prev) =>
-          nextCursor === undefined ? response.items.length : (prev ?? 0) + response.items.length,
         );
         setCursor(response.next_cursor);
       } catch (cause) {
@@ -118,13 +116,11 @@ export function ControlPointsPage(): React.ReactNode {
           >
             刷新
           </Button>
-          {total !== null && (
-            <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
-          )}
+          <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
         </Space>
       </Card>
 
-      {error !== null && <Alert type="error" showIcon message={error} />}
+      {error !== null && rows.length === 0 && <Alert type="error" showIcon message={error} />}
 
       <Card title={systemId !== null ? '可控点清单（按系统过滤）' : '可控点清单'}>
         <Table<ControlPointItem>
@@ -221,6 +217,9 @@ export function ControlPointsPage(): React.ReactNode {
             },
           ]}
         />
+        {error !== null && rows.length > 0 && (
+          <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />
+        )}
         {cursor !== null && (
           <Button
             block

@@ -3,7 +3,9 @@
  *
  * - 折叠视图：根行「+N 子告警」角标，展开走 root_group_id 参数（§3.1）；
  * - 批量 ack 仅作用勾选可见行（含展开子行），207 逐项结果汇总 toast + 失败行内联标红；
- * - 游标分页「加载更多 + 已加载计数」（§3.1，照齐可控点清单示范）；
+ * - 游标分页「加载更多 + 已加载计数」（§3.1，照齐可控点清单示范；计数直接渲染
+ *   rows.length，不设冗余 total state——DAT-210）；加载失败报错位置随数据态
+ *   （§5.4，DAT-210：已保留数据时收窄到列表底部按钮区，无数据时页级）；
  * - 列表时间相对显示（§2.2，hover 完整时间戳）；能力显隐 ack/close=alarms.ack，
  *   suppress=alarms.suppress。
  */
@@ -38,7 +40,6 @@ export function AlarmsPage(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams();
   const [rows, setRows] = useState<readonly AlarmRow[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<readonly string[]>([]);
@@ -64,7 +65,6 @@ export function AlarmsPage(): React.ReactNode {
         const result = await apiFetch(`/alarms?${params.toString()}`, AlarmListResponseSchema);
         const page = result.items.map((item) => ({ ...item, key: String(item.id) }));
         setRows((prev) => (nextCursor === undefined ? page : [...prev, ...page]));
-        setTotal((prev) => (nextCursor === undefined ? page.length : (prev ?? 0) + page.length));
         setCursor(result.next_cursor);
       } catch (cause) {
         setError(errorText(cause, '告警列表加载失败'));
@@ -257,11 +257,9 @@ export function AlarmsPage(): React.ReactNode {
             setSearchParams((prev) => setParam(prev, 'category', value));
           }}
         />
-        {total !== null && (
-          <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
-        )}
+        <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
       </Space>
-      {error !== null && (
+      {error !== null && rows.length === 0 && (
         <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />
       )}
       <Table<AlarmRow>
@@ -297,6 +295,9 @@ export function AlarmsPage(): React.ReactNode {
           },
         })}
       />
+      {error !== null && rows.length > 0 && (
+        <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />
+      )}
       {cursor !== null && (
         <Button
           block

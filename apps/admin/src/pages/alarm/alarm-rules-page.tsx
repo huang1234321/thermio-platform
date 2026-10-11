@@ -2,7 +2,9 @@
  * 告警规则页 /alarm-rules（M4-alarm.md §7 行 3）：规则表格 + 编辑表单
  * （rule_type 定 scope（组合矩阵 §4.1）/severity/sustained_s/params 动态表单/启停开关）；
  * 删除确认按钮不用危险色（§4.2 白名单：危险色仅 apply/凭证轮换；DAT-157 修单）；
- * 游标分页「加载更多 + 已加载计数」（§3.1）；创建时间相对显示（§2.2）。
+ * 游标分页「加载更多 + 已加载计数」（§3.1；计数直接渲染 items.length，不设冗余
+ * total state——DAT-210）；创建时间相对显示（§2.2）；加载失败报错位置随数据态
+ * （§5.4，DAT-210：已保留数据时收窄到列表底部按钮区，无数据时页级）。
  * 能力 alarm_rules.write（admin）。
  */
 import {
@@ -65,7 +67,6 @@ export function AlarmRulesPage(): React.ReactNode {
   const canWrite = useHasCapability('alarm_rules.write');
   const [items, setItems] = useState<readonly AlarmRule[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
@@ -83,9 +84,6 @@ export function AlarmRulesPage(): React.ReactNode {
         AlarmRuleListResponseSchema,
       );
       setItems((prev) => (nextCursor === undefined ? result.items : [...prev, ...result.items]));
-      setTotal((prev) =>
-        nextCursor === undefined ? result.items.length : (prev ?? 0) + result.items.length,
-      );
       setCursor(result.next_cursor);
     } catch (cause) {
       setError(errorText(cause, '规则列表加载失败'));
@@ -258,9 +256,7 @@ export function AlarmRulesPage(): React.ReactNode {
       title="告警规则"
       extra={
         <Space>
-          {total !== null && (
-            <Typography.Text type="secondary">已加载 {String(items.length)} 条</Typography.Text>
-          )}
+          <Typography.Text type="secondary">已加载 {String(items.length)} 条</Typography.Text>
           {canWrite && (
             <Button
               type="primary"
@@ -274,7 +270,7 @@ export function AlarmRulesPage(): React.ReactNode {
         </Space>
       }
     >
-      {error !== null && (
+      {error !== null && items.length === 0 && (
         <Alert type="error" showIcon message={error} style={{ marginBottom: 12 }} />
       )}
       <Table<AlarmRule>
@@ -285,6 +281,9 @@ export function AlarmRulesPage(): React.ReactNode {
         dataSource={[...items]}
         pagination={false}
       />
+      {error !== null && items.length > 0 && (
+        <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />
+      )}
       {cursor !== null && (
         <Button
           block

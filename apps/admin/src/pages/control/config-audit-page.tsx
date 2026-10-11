@@ -5,8 +5,10 @@
  *   封闭集五值）/ 操作者类型（human|system）/ 时间区间；
  * - 六列：时间 / 点位 / 字段（中英并陈）/ 变更（old→new）/ 操作者（human=用户名 /
  *   system 徽标）/ 原因；工具栏「已加载 N 条」计数（§3.1，DAT-157 修单——与可控点
- *   清单对齐）；时间列改相对时间 + hover 完整时间戳（§2.2，DAT-157 验收裁决覆盖
- *   M8 §6「审计语境绝对时间」原口径，审计可追溯性由 hover 完整时间戳承载）；
+ *   清单对齐，直接渲染 rows.length，不设冗余 total state）；时间列改相对时间 +
+ *   hover 完整时间戳（§2.2，DAT-157 验收裁决覆盖 M8 §6「审计语境绝对时间」原口径，
+ *   审计可追溯性由 hover 完整时间戳承载）；加载失败报错位置随数据态（§5.4，
+ *   DAT-210：已保留数据时收窄到列表底部按钮区，无数据时页级）；
  * - 双轨边界（flows §6）：本页只检索 config_audit；值写审计在 M5 /control-audit
  *   ——页头固定互链说明条。
  */
@@ -49,7 +51,6 @@ export function ConfigAuditPage(): React.ReactNode {
   const [searchParams] = useSearchParams();
   const [rows, setRows] = useState<readonly ConfigAuditItem[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
-  const [total, setTotal] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pointId, setPointId] = useState(searchParams.get('point_id') ?? '');
@@ -77,9 +78,6 @@ export function ConfigAuditPage(): React.ReactNode {
         );
         setRows((prev) =>
           nextCursor === undefined ? response.items : [...prev, ...response.items],
-        );
-        setTotal((prev) =>
-          nextCursor === undefined ? response.items.length : (prev ?? 0) + response.items.length,
         );
         setCursor(response.next_cursor);
       } catch (cause) {
@@ -149,13 +147,11 @@ export function ConfigAuditPage(): React.ReactNode {
           >
             检索
           </Button>
-          {total !== null && (
-            <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
-          )}
+          <Typography.Text type="secondary">已加载 {String(rows.length)} 条</Typography.Text>
         </Space>
       </Card>
 
-      {error !== null && <Alert type="error" showIcon message={error} />}
+      {error !== null && rows.length === 0 && <Alert type="error" showIcon message={error} />}
 
       <Card title="变更历史（config_audit · at DESC）">
         <Table<ConfigAuditItem>
@@ -217,6 +213,9 @@ export function ConfigAuditPage(): React.ReactNode {
             },
           ]}
         />
+        {error !== null && rows.length > 0 && (
+          <Alert type="error" showIcon message={error} style={{ marginTop: 12 }} />
+        )}
         {cursor !== null && (
           <Button
             block

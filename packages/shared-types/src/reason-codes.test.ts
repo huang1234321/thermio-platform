@@ -46,7 +46,12 @@ describe('reason_code registry', () => {
     //   fdd.report_not_found / fdd.state_invalid——前二为既有草案码机械映射转正注册）。
     // + DAT-151 两码（M1-asset §1.2 v1.2：asset.building_mismatch（422）/
     //   asset.offline_action_ref_conflict（409）——§3.10 物理层编辑）。
-    expect(REASON_CODES).toHaveLength(80);
+    // + IMPL-21 十二码（DAT-242，M9-mv-report.md §1.2：mv 域增量——
+    //   baseline_not_found / report_not_found / metering_points_invalid /
+    //   weather_station_invalid / baseline_state_invalid / baseline_overlap /
+    //   window_insufficient / fit_unqualified / period_data_insufficient /
+    //   report_state_invalid / report_period_locked / export_file_expired）。
+    expect(REASON_CODES).toHaveLength(92);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

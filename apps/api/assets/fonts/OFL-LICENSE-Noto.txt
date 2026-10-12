@@ -1,0 +1,9 @@
+SIL Open Font License 1.1 — Noto Sans CJK SC subset (NotoSansSC-MvReport.otf)
+
+本文件为 Google Noto Sans CJK SC (Simplified Chinese) 的字符子集，
+子集范围：ASCII + GB2312 全集 + CJK 标点/全角/常用记号（M&V 报告模板用字面）。
+原字体版权 © 2014-2026 Google Inc.，依 SIL Open Font License 1.1 授权：
+https://openfontlicense.org/open-font-license-official-text/
+
+OFL 1.1 许可证全文见原项目 LICENSE：
+https://github.com/googlefonts/noto-cjk/blob/main/Sans/LICENSE

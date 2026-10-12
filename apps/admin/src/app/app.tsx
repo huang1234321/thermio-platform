@@ -43,6 +43,9 @@ import { FddOverviewPage } from '../pages/fdd/fdd-overview.js';
 import { FddFindingsPage } from '../pages/fdd/fdd-findings.js';
 import { FddFindingDetailPage } from '../pages/fdd/fdd-finding-detail.js';
 import { FddReportsPage, FddReportDetailPage } from '../pages/fdd/fdd-reports.js';
+import { MvOverviewPage } from '../pages/mv/mv-overview.js';
+import { MvBaselineDetailPage } from '../pages/mv/mv-baseline-detail.js';
+import { MvReportDetailPage } from '../pages/mv/mv-report-detail.js';
 
 function RequireAuth(): ReactNode {
   const { state } = useAuth();
@@ -81,6 +84,13 @@ export function App(): ReactNode {
           <Route element={<AppLayout />}>
             <Route index element={<Navigate to="/monitor" replace />} />
             {/* FDD 组（M6-fdd §7：概览/发现列表/详情/报告列表/报告详情，能力 fdd.read） */}
+            {/* M&V 组（M9-mv-report §8：总览/基线详情/报告详情，能力 mv.read） */}
+            <Route element={<RequireCapability capability="mv.read" />}>
+              <Route path="/mv" element={<MvOverviewPage />} />
+              <Route path="/mv/baselines/:baselineId" element={<MvBaselineDetailPage />} />
+              <Route path="/mv/reports/:reportId" element={<MvReportDetailPage />} />
+            </Route>
+
             <Route element={<RequireCapability capability="fdd.read" />}>
               <Route path="/fdd" element={<FddOverviewPage />} />
               <Route path="/fdd/findings" element={<FddFindingsPage />} />

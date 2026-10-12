@@ -130,6 +130,9 @@ const AppConfigSchema = z.object({
   MQTT_USERNAME: z.string().default('svc-api'),
   MQTT_PASSWORD: z.string().default(''),
   MQTT_CLIENT_ID: z.string().min(1).default('thermio-api-import'),
+  // ── M&V 导出件存储（M9-mv-report §1.6/§2.5 R7：mv-exports/ 私桶锚的本地文件形态）──
+  // 对象存储（prod 接入）= 替换 MvExportService 的文件读写实现，目录键形状不变。
+  MV_EXPORT_DIR: z.string().default('mv-exports'),
   // ── 认证会话（SEC-AZ-04：短时效 + 服务端可撤销）──
   AUTH_JWT_SECRET: z.string().min(32).default(''),
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),

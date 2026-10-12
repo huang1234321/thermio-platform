@@ -18,6 +18,7 @@ export const MENU_ENTRIES: readonly MenuEntry[] = [
   { key: 'alarms', label: '告警中心', route: '/alarms', capability: 'alarms.read' },
   { key: 'proposals', label: '控制建议', route: '/proposals', capability: 'proposals.read' },
   { key: 'fdd', label: 'FDD 报告', route: '/fdd', capability: 'fdd.read' },
+  { key: 'mv', label: 'M&V 报告', route: '/mv', capability: 'mv.read' },
   { key: 'assets', label: '资产管理', route: '/assets', capability: 'assets.read' },
   { key: 'imports', label: '点表导入', route: '/imports', capability: 'imports.read' },
   { key: 'control', label: '控制安全', route: '/control/points', capability: 'control.read' },

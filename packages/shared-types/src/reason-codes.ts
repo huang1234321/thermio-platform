@@ -179,8 +179,24 @@ export const REASON_CODES = [
   'point.control_mode_transition_invalid',
   'point.control_mode_same',
   'point.control_mode_point_not_controllable',
+  // mv 域种子两码（platform.md §5.2）+ M9 增量 12 码（modules/M9-mv-report.md §1.2
+  // 全量码表；DAT-104 管道，IMPL-21 / DAT-242 注册。422/409 两分法：请求说了什么
+  // （值形状/枚举/值域/集合合法性）→ 422；世界是什么状态（数据就绪/生命周期前置/
+  // 并发冲突）→ 409）
   'mv.baseline_not_active',
   'mv.period_invalid',
+  'mv.baseline_not_found',
+  'mv.report_not_found',
+  'mv.metering_points_invalid',
+  'mv.weather_station_invalid',
+  'mv.baseline_state_invalid',
+  'mv.baseline_overlap',
+  'mv.window_insufficient',
+  'mv.fit_unqualified',
+  'mv.period_data_insufficient',
+  'mv.report_state_invalid',
+  'mv.report_period_locked',
+  'mv.export_file_expired',
   'alarm.rule_not_found',
   'alarm.not_found',
   'alarm.state_invalid',
@@ -494,6 +510,69 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'mv',
     http: 422,
     description: 'M&V 核证期参数无效',
+  },
+  // M9 增量 12 码（M9-mv-report.md §1.2；IMPL-21 / DAT-242 注册）
+  'mv.baseline_not_found': {
+    domain: 'mv',
+    http: 404,
+    description: 'M&V 基线不存在或越权（SEC-AZ-03 不区分；M9 §1.2）',
+  },
+  'mv.report_not_found': {
+    domain: 'mv',
+    http: 404,
+    description: 'M&V 报告/生成任务/导出任务不存在或越权（details.entity 区分；M9 §1.2）',
+  },
+  'mv.metering_points_invalid': {
+    domain: 'mv',
+    http: 422,
+    description: '计量边界点位集非法：空集/非本楼/非 energy 量型/含停用点（M9 §2.2）',
+  },
+  'mv.weather_station_invalid': {
+    domain: 'mv',
+    http: 422,
+    description: '天气站点近 90 天无观测（M9 §2.1）',
+  },
+  'mv.baseline_state_invalid': {
+    domain: 'mv',
+    http: 409,
+    description:
+      '基线状态机非法迁移：PATCH/DELETE 非 draft、activate 非 draft、retire 非 active（M9 §4.1）',
+  },
+  'mv.baseline_overlap': {
+    domain: 'mv',
+    http: 409,
+    description:
+      '激活命中同租户 active 基线期重叠（产品面前置校验；库级 EXCLUDE 为并发兜底，M9 §4.1）',
+  },
+  'mv.window_insufficient': {
+    domain: 'mv',
+    http: 409,
+    description: '激活时数据窗完整日 < 90 或完整率 < 90%（M9 §3.5）',
+  },
+  'mv.fit_unqualified': {
+    domain: 'mv',
+    http: 409,
+    description: '激活时模型拟合未达标：CVRMSE > 30% 或 |NMBE| > 10%（M9 §3.4）',
+  },
+  'mv.period_data_insufficient': {
+    domain: 'mv',
+    http: 409,
+    description: '生成时报告期能量数据完整率 < 90%（缺口明细进 details；M9 §3.6）',
+  },
+  'mv.report_state_invalid': {
+    domain: 'mv',
+    http: 409,
+    description: '报告状态机非法迁移：approve 非 pending、DELETE 已审批、下载未完成（M9 §4.2）',
+  },
+  'mv.report_period_locked': {
+    domain: 'mv',
+    http: 409,
+    description: '对已存在已审批报告的（基线 × 报告期）再次发起生成（M9 §4.4）',
+  },
+  'mv.export_file_expired': {
+    domain: 'mv',
+    http: 409,
+    description: '导出件超过保留期（30 天）被清理后下载（M9 §1.7）',
   },
   'alarm.rule_not_found': {
     domain: 'alarm',

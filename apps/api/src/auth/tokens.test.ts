@@ -22,11 +22,7 @@ describe('access token', () => {
       900,
     );
     const claims = await verifyAccessToken(token, SECRET);
-    expect(claims?.sub).toBe('u1');
-    expect(claims?.tid).toBe('t1');
-    expect(claims?.sid).toBe('s1');
-    expect(claims?.role).toBe('admin');
-    expect(claims?.mcp).toBe(false);
+    expect(claims).toMatchObject({ sub: 'u1', tid: 't1', sid: 's1', role: 'admin', mcp: false });
   });
 
   it('shouldRejectTokensSignedWithADifferentKey', async () => {
@@ -38,7 +34,7 @@ describe('access token', () => {
     expect(await verifyAccessToken(token, OTHER_SECRET)).toBeNull();
   });
 
-  it('shouldRejectExpiredTokens', async () => {
+  it('shouldDistinguishExpiredAccess_refreshableSentinelNotNull (DAT-206)', async () => {
     const past = new Date(Date.now() - 3600_000);
     const { token } = await signAccessToken(
       { sub: 'u1', tid: 't1', sid: 's1', role: 'viewer', mcp: false, typ: 'access' },
@@ -46,7 +42,9 @@ describe('access token', () => {
       900,
       past,
     );
-    expect(await verifyAccessToken(token, SECRET)).toBeNull();
+    // 过期单列（守卫发 auth.token_expired 触发客户端静默续期），不再与
+    // 「令牌不可用」混归 null → auth.unauthenticated
+    expect(await verifyAccessToken(token, SECRET)).toEqual({ expired: true });
   });
 
   it('shouldRefuseRefreshTokensOnTheAccessPath_typConfusion', async () => {
@@ -70,6 +68,14 @@ describe('refresh token', () => {
       SECRET,
       900,
     );
+    expect(await verifyRefreshToken(token, SECRET)).toBeNull();
+  });
+
+  it('shouldKeepExpiredRefresh_nullNotSentinel (DAT-206)', async () => {
+    // refresh 侧过期与撤销/不匹配同面 auth.refresh_revoked（服务层文案统一），
+    // 不引入过期单列
+    const past = new Date(Date.now() - 3600_000);
+    const { token } = await signRefreshToken({ tid: 't1', sid: 's1' }, SECRET, 900, past);
     expect(await verifyRefreshToken(token, SECRET)).toBeNull();
   });
 });

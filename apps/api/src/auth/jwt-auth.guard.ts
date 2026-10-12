@@ -6,6 +6,8 @@
  * 2. 认证域未接线（TENANT_DB 为 null，骨架形态）→ 放行：与 kafka 未接线同形，
  *    生产部署必须配置三件套（PG_API_URL/PG_AUTH_URL/AUTH_JWT_SECRET），启动 WARN 留痕；
  * 3. Bearer 缺失/不可解析 → 401 auth.unauthenticated（草案码 UNAUTHENTICATED）；
+ *    签名有效但 exp 已过（15 分钟 access 到期，DAT-206 现象 2）→ 401
+ *    auth.token_expired（可刷新码——客户端 apiFetch 静默续期链的触发器）；
  * 4. 会话回查（真相源 auth_session + app_user.status）：revoked → 401
  *    auth.invalid_credentials；过期 → 401 auth.token_expired；用户被停用 → 401
  *    auth.invalid_credentials——「短时效 + 可撤销」的撤销面就在这一步；
@@ -24,7 +26,7 @@ import type { TenantDb } from '../infrastructure/db/tenant-db.js';
 import { setAuthContext, type AuthContext } from './auth-context.js';
 import { isPublicRoute } from './public.decorator.js';
 import { ReasonCodeException } from '../infrastructure/errors/reason-code.exception.js';
-import { verifyAccessToken } from './tokens.js';
+import { verifyAccessToken, type VerifiedAccess } from './tokens.js';
 
 /** mcp=true 时仍放行的路径（登录后的自管理闭环：改密/登出/刷新/看自己）。 */
 const MUST_CHANGE_ALLOWLIST: ReadonlySet<string> = new Set([
@@ -68,6 +70,12 @@ export class JwtAuthGuard implements CanActivate {
     if (claims === null) {
       throw new ReasonCodeException('auth.unauthenticated', '未认证：令牌无效或已过期');
     }
+    if ('expired' in claims) {
+      // 签名有效但 exp 已过（DAT-206 现象 2）：可刷新失败发 token_expired——
+      // 客户端 apiFetch 401→refresh→retry 静默续期链只认这个码，此前归入
+      // unauthenticated 令 15 分钟到期的会话中途请求不走续期、误报服务不可用
+      throw new ReasonCodeException('auth.token_expired', '访问令牌已过期');
+    }
 
     const session = await this.loadSession(claims);
     if (session.status === 'revoked' || !session.user_active) {
@@ -94,9 +102,7 @@ export class JwtAuthGuard implements CanActivate {
   }
 
   /** 会话回查：撤销真相源在 DB（JWT 只承载身份主张）。 */
-  private async loadSession(
-    claims: NonNullable<Awaited<ReturnType<typeof verifyAccessToken>>>,
-  ): Promise<SessionRow> {
+  private async loadSession(claims: VerifiedAccess): Promise<SessionRow> {
     if (this.tenantDb === null) throw new Error('unreachable: tenantDb checked by caller');
     return this.tenantDb.withTenant(claims.tid, async (tx) => {
       const result = await tx.query(

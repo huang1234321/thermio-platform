@@ -4,6 +4,9 @@
  * - RequireAuth：无会话 → /login（保留回跳地址；baseline §4.4 TOKEN_EXPIRED 行为）；
  * - MustChangePassword：SEC-PW-03 未轮换 → 只放行 /settings/me（改密闭环）与公共页；
  * - RequireCapability：能力缺失 → 403 页（服务端同源判权，UI 不本地推断角色）。
+ *
+ * DAT-247：无营销落地页——`/` 与其余路由同走 RequireAuth 认证门（匿名 → /login
+ * 登录表单，会话有效 → /monitor 工作区），回归钉见 app-routing.test.tsx。
  */
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
 import type { ReactNode } from 'react';
@@ -82,6 +85,7 @@ export function App(): ReactNode {
       <Route element={<RequireAuth />}>
         <Route element={<RequirePasswordRotation />}>
           <Route element={<AppLayout />}>
+            {/* DAT-247：根路径先过 RequireAuth——匿名 → /login，已登录 → /monitor */}
             <Route index element={<Navigate to="/monitor" replace />} />
             {/* FDD 组（M6-fdd §7：概览/发现列表/详情/报告列表/报告详情，能力 fdd.read） */}
             {/* M&V 组（M9-mv-report §8：总览/基线详情/报告详情，能力 mv.read） */}

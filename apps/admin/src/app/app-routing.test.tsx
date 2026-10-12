@@ -89,13 +89,15 @@ describe('根路径路由（DAT-247）', () => {
 
     renderAt('/');
 
+    // 路径与表单断言放同一 waitFor 谓词：LocationProbe 在渲染期赋值，React 18
+    // 并发渲染下可先于提交可观测——若在此之后同步查 DOM，CI 高负载会拉开
+    // 「变量已变、DOM 未提交」竞态窗口（DAT-247 首轮 CI flake 根因）。
     await waitFor(() => {
       expect(currentPath).toBe('/login');
+      expect(screen.getByText('邮箱')).toBeDefined();
+      expect(screen.getByText('密码')).toBeDefined();
+      expect(screen.getByText('登 录')).toBeDefined();
     });
-    // 直达登录表单（非落地页/占位）
-    expect(screen.getByText('邮箱')).toBeDefined();
-    expect(screen.getByText('密码')).toBeDefined();
-    expect(screen.getByText('登 录')).toBeDefined();
   });
 
   it('已登录访问 / → /monitor 工作区', async () => {
@@ -115,11 +117,11 @@ describe('根路径路由（DAT-247）', () => {
 
     renderAt('/');
 
+    // 同上：路径断言与工作区铬断言同谓词重试，通过即代表提交态一致。
     await waitFor(() => {
       expect(currentPath).toBe('/monitor');
+      expect(screen.getByText('monitor-stub')).toBeDefined();
+      expect(screen.getByText('监控总览')).toBeDefined();
     });
-    // 工作区铬已就位：/monitor 页面 + 按能力可见的一级菜单
-    expect(screen.getByText('monitor-stub')).toBeDefined();
-    expect(screen.getByText('监控总览')).toBeDefined();
   });
 });

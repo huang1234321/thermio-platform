@@ -1,6 +1,7 @@
 /**
  * 会话刷新 single-flight 用例（DAT-160）：boot 恢复与 401 重试并发时共享同一
  * in-flight 刷新，只发一次网络请求；轮换竞态下不清活会话；真过期仍清回登录。
+ * 会话中途 access 过期（DAT-206 现象 2）：401 token_expired 静默续期一次重放。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { apiFetch, doRefresh, loadStoredRefreshToken, tokenStore } from './api-client.js';
@@ -151,5 +152,38 @@ describe('刷新 single-flight（DAT-160）', () => {
     expect(tokenStore.onAuthExpired).toHaveBeenCalledTimes(1);
     expect(loadStoredRefreshToken()).toBeNull();
     expect(tokenStore.accessToken).toBeNull();
+  });
+
+  it('会话中途 access 过期（DAT-206 现象 2）：401 token_expired 静默续期重放成功', async () => {
+    // 中途过期形态：access 在内存（非 boot 窗口），业务请求撞 401 token_expired
+    // （DAT-206 修复后过期 access JWT 即此码）→ 单次 refresh → 持新 access 重放。
+    localStorage.setItem(REFRESH_KEY, 'refresh-live');
+    tokenStore.accessToken = 'access-stale';
+    const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
+      if (url.endsWith('/auth/refresh')) {
+        return Promise.resolve(json(200, tokensOf('renewed')));
+      }
+      const auth = new Headers(init?.headers).get('authorization');
+      if (auth === 'Bearer access-stale') {
+        return Promise.resolve(json(401, envelope('auth.token_expired')));
+      }
+      return Promise.resolve(json(200, { ok: true }));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    tokenStore.onAuthExpired = vi.fn();
+
+    await expect(
+      apiFetch('/demo', {
+        safeParse: (v: unknown) => ({ success: true as const, data: v }),
+      }),
+    ).resolves.toEqual({ ok: true });
+
+    const refreshCalls = fetchMock.mock.calls.filter(([url]) =>
+      String(url).endsWith('/auth/refresh'),
+    );
+    expect(refreshCalls).toHaveLength(1);
+    expect(tokenStore.onAuthExpired).not.toHaveBeenCalled();
+    expect(tokenStore.accessToken).toBe('access-renewed');
+    expect(loadStoredRefreshToken()).toBe('refresh-renewed');
   });
 });

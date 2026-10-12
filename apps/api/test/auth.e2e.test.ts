@@ -19,7 +19,15 @@ import {
   type LoginResponse,
   type MeResponse,
 } from '@thermio/shared-types';
-import { E2E_READY, PASSWORDS, bootE2eApp, seedWorld, type SeededWorld } from './e2e-env.js';
+import {
+  E2E_READY,
+  E2E_JWT_SECRET,
+  PASSWORDS,
+  bootE2eApp,
+  seedWorld,
+  type SeededWorld,
+} from './e2e-env.js';
+import { signAccessToken } from '../src/auth/tokens.js';
 
 const skipped = E2E_READY ? describe : describe.skip;
 
@@ -177,6 +185,23 @@ skipped('auth/rbac/tenant e2e（IMPL-10 验收要点）', () => {
       const garbage = await authedGet('/api/v1/me', 'not-a-jwt');
       expect(garbage.status).toBe(401);
       expect(expectEnvelope(garbage).reason_code).toBe('auth.unauthenticated');
+    });
+
+    it('shouldMapExpiredAccessToken_toRefreshableTokenExpired (DAT-206 现象 2)', async () => {
+      // 15 分钟 access 到期的最小复现：同签名钥 + 过去 issuedAt 签发已过期 access。
+      // claims 用占位值即可——过期在签名校验后、会话回查前判定，不触达 loadSession。
+      // 此前该形态归 auth.unauthenticated，客户端 apiFetch 401→refresh→retry
+      // 静默续期链只认 auth.token_expired，导致会话中途过期误报服务不可用。
+      const past = new Date(Date.now() - 3600_000);
+      const { token } = await signAccessToken(
+        { sub: 'u-exp', tid: 't-exp', sid: 's-exp', role: 'viewer', mcp: false, typ: 'access' },
+        E2E_JWT_SECRET,
+        900,
+        past,
+      );
+      const response = await authedGet('/api/v1/me', token);
+      expect(response.status).toBe(401);
+      expect(expectEnvelope(response).reason_code).toBe('auth.token_expired');
     });
   });
 

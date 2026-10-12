@@ -153,8 +153,44 @@ describe('reason_code registry snapshot', () => {
         "mv.baseline_not_active": {
           "http": 409,
         },
+        "mv.baseline_not_found": {
+          "http": 404,
+        },
+        "mv.baseline_overlap": {
+          "http": 409,
+        },
+        "mv.baseline_state_invalid": {
+          "http": 409,
+        },
+        "mv.export_file_expired": {
+          "http": 409,
+        },
+        "mv.fit_unqualified": {
+          "http": 409,
+        },
+        "mv.metering_points_invalid": {
+          "http": 422,
+        },
+        "mv.period_data_insufficient": {
+          "http": 409,
+        },
         "mv.period_invalid": {
           "http": 422,
+        },
+        "mv.report_not_found": {
+          "http": 404,
+        },
+        "mv.report_period_locked": {
+          "http": 409,
+        },
+        "mv.report_state_invalid": {
+          "http": 409,
+        },
+        "mv.weather_station_invalid": {
+          "http": 422,
+        },
+        "mv.window_insufficient": {
+          "http": 409,
         },
         "point.control_mode_point_not_controllable": {
           "http": 409,

@@ -123,7 +123,30 @@ export class MonitorService {
         actor.tenant_id,
         loadRateRows.map((row) => row.equipment_id),
       );
-      return { building, alarms, gateways, energyPointIds, loadRateRows, runStatusLatest };
+      // M9 接线（M9-mv-report §3.7）：最新 approved 报告的节能量（降级取口径 A 差值）
+      const savingRow = await tx.query<{ adjusted: string | null; raw: string }>(
+        `SELECT r.weather_adjusted_saving_kwh AS adjusted,
+                (r.baseline_energy_kwh - r.actual_energy_kwh)::text AS raw
+         FROM mv_report r
+         JOIN mv_baseline b ON b.tenant_id = r.tenant_id AND b.id = r.baseline_id
+         WHERE r.tenant_id = $1 AND b.building_id = $2 AND r.approved_by IS NOT NULL
+         ORDER BY upper(r.report_period) DESC, r.generated_at DESC
+         LIMIT 1`,
+        [actor.tenant_id, building.id],
+      );
+      const savingPeriodKwh =
+        savingRow.rows[0] === undefined
+          ? null
+          : Number(savingRow.rows[0].adjusted ?? savingRow.rows[0].raw);
+      return {
+        building,
+        alarms,
+        gateways,
+        energyPointIds,
+        loadRateRows,
+        runStatusLatest,
+        savingPeriodKwh,
+      };
     });
 
     // TSDB 读（read replica 纪律继承；窗口 = UTC 日/月边界，边界口径见交付说明）
@@ -162,7 +185,9 @@ export class MonitorService {
           snapshot.energyPointIds.length > 0 ? sumEnergyDeltas(todayEndpoints) : null,
         energy_period_kwh:
           snapshot.energyPointIds.length > 0 ? sumEnergyDeltas(periodEndpoints) : null,
-        saving_period_kwh: null, // M9（M&V）交付前恒 null 占位（§3.1/§10.2 B1）
+        // M9 接线（M9-mv-report §3.7）：最新 approved 报告（report_period 上界 DESC），
+        // 降级报告取口径 A 差值；未审批不算节能量（结算纪律）
+        saving_period_kwh: snapshot.savingPeriodKwh,
         load_rate_pct: snapshot.loadRateRows.length > 0 ? weightedLoadRate(loadUnits) : null,
         load_rate_linked: snapshot.loadRateRows.length > 0,
         alarms: snapshot.alarms,

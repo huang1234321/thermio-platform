@@ -39,6 +39,12 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
  *
  * IMPL-16 切片增量（M6-fdd.md §5/R6 定稿键名逐字，DAT-212）：
  * fdd.write（operator+：抽检记录 + 忽略）。
+ *
+ * IMPL-21 增量（M7-auth.md §4.1 增补提案定稿键名逐字，M9-mv-report.md §1.5，
+ * DAT-242）：mv.read（三角色浏览，授权楼宇内）/ mv_baselines.write（仅 admin——
+ * 核证口径属商业结算边界）/ mv_reports.generate（operator+，授权楼宇）/
+ * mv_reports.approve（仅 admin，结算锁定）/ mv_reports.export（operator+，
+ * viewer 仅在线浏览——出域最小化）。
  */
 export const CAPABILITIES = [
   'monitor.read',
@@ -50,6 +56,11 @@ export const CAPABILITIES = [
   'proposals.decide.write',
   'fdd.read',
   'fdd.write',
+  'mv.read',
+  'mv_baselines.write',
+  'mv_reports.generate',
+  'mv_reports.approve',
+  'mv_reports.export',
   'assets.read',
   'assets.write',
   'points.semantics.write',
@@ -86,6 +97,7 @@ const VIEWER_CAPABILITIES: readonly Capability[] = [
   'alarms.read',
   'proposals.read',
   'fdd.read',
+  'mv.read',
   'assets.read',
   'imports.read',
   'control.read',
@@ -105,6 +117,8 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'alarms.ack',
     'proposals.decide.write',
     'fdd.write',
+    'mv_reports.generate',
+    'mv_reports.export',
   ],
   admin: [
     ...VIEWER_CAPABILITIES,
@@ -121,6 +135,10 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'control.write',
     'users.manage',
     'fdd.write',
+    'mv_baselines.write',
+    'mv_reports.generate',
+    'mv_reports.approve',
+    'mv_reports.export',
   ],
 };
 

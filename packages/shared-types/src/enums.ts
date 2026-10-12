@@ -165,6 +165,35 @@ export const MvMethodSchema = z.enum(MV_METHODS);
 export type MvMethod = z.infer<typeof MvMethodSchema>;
 
 /**
+ * M&V 基线模型形式（M9-mv-report.md §3.4：V1.0 唯一形式 = 日粒度 OLS
+ * CDD/HDD + 周末哑变量；自动建模/多模型对比为非目标）。
+ */
+export const MV_MODEL_TYPES = ['ols_daily_cdd_hdd'] as const;
+export const MvModelTypeSchema = z.enum(MV_MODEL_TYPES);
+export type MvModelType = z.infer<typeof MvModelTypeSchema>;
+
+/**
+ * M&V 异步任务四态（M9-mv-report.md §2.4：mv_generation_job.status CHECK 逐字；
+ * import_job 同族——无 in-flight 子态，进行中语义 = queued/running）。
+ */
+export const MV_JOB_STATUSES = ['queued', 'running', 'succeeded', 'failed'] as const;
+export const MvJobStatusSchema = z.enum(MV_JOB_STATUSES);
+export type MvJobStatus = z.infer<typeof MvJobStatusSchema>;
+
+/**
+ * 导出任务资源类型（M9-mv-report.md §2.5 export_job.resource_type CHECK 逐字：
+ * 资源无关载体，fdd_report = M11 预留值——DAT-237 对齐锚 O1）。
+ */
+export const MV_EXPORT_RESOURCE_TYPES = ['mv_report', 'fdd_report'] as const;
+export const MvExportResourceTypeSchema = z.enum(MV_EXPORT_RESOURCE_TYPES);
+export type MvExportResourceType = z.infer<typeof MvExportResourceTypeSchema>;
+
+/** 导出格式（M9-mv-report.md §2.5：V1.0 单格式钉死）。 */
+export const MV_EXPORT_FORMATS = ['pdf'] as const;
+export const MvExportFormatSchema = z.enum(MV_EXPORT_FORMATS);
+export type MvExportFormat = z.infer<typeof MvExportFormatSchema>;
+
+/**
  * 告警规则作用域（DATA-MODEL §3.7 alarm_rule.scope）。
  * IMPL-13 增补 'gateway'（M4-alarm.md §4.1 R3：源头 ddl.md §7 差异 #7 已定
  * 「scope/source_type 增加 gateway」——网关离线告警链路）。

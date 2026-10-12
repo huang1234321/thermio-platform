@@ -20,3 +20,6 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
+
+# M&V 导出件本地落盘（MV_EXPORT_DIR 默认形态，R7 私桶锚——运行时产物不入库）
+mv-exports/

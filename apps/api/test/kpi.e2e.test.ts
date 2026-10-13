@@ -625,6 +625,47 @@ skipped('M11 kpi 域 e2e（§5.9 契约矩阵）', () => {
     expect(benchmark.unlinked_reason).toBe('mv_baseline_pending');
   });
 
+  // ── DEF-1 回归锚（TEST-RPT-01 修单自测）：序列源 benchmark_series 非空 + 对齐 + 与 baseline 同源 ──
+  it('shouldReturnAlignedNonEmptySeries_forBothSeriesSources（DEF-1）', async () => {
+    // 合成参考窗数据形态：参考窗 bucketIndex 全为负（previous_period ∈ [−48,0)，
+    // same_period_last_year 偏移 −8760h）——fake 的缺数条件 idx%3===2 对负索引不触发
+    // （JS 负模非正）→ 参考窗五路全勤，每桶 = 5 × 12 = 60，48 桶。
+    for (const source of ['previous_period', 'same_period_last_year'] as const) {
+      const put = await request(http())
+        .put(`/api/v1/kpi/benchmark-config?building_id=${world.buildingA1}`)
+        .set('Authorization', `Bearer ${adminToken}`)
+        .send({ source, params: {} });
+      expect(put.status).toBe(200);
+      const response = await authed(
+        'get',
+        `/api/v1/kpi/energy/trend?building_id=${world.buildingA1}&from=${FROM}&to=${TO}&group_by=none`,
+        adminToken,
+      );
+      expect(response.status).toBe(200);
+      const trend = response.body as {
+        buckets: { bucket: string }[];
+        benchmark: { status: string; baseline_kwh: number | null };
+        benchmark_series: { bucket: string; value_kwh: number | null }[] | null;
+      };
+      expect(trend.benchmark.status).toBe('ok');
+      expect(trend.benchmark_series).not.toBeNull();
+      const series = trend.benchmark_series ?? [];
+      // 逐桶对齐实际窗（§4.3：序列桶 = 实际窗桶）
+      expect(series).toHaveLength(trend.buckets.length);
+      expect(series.map((p) => p.bucket)).toEqual(trend.buckets.map((b) => b.bucket));
+      // 非空：参考窗全桶有值 → 修复前恒 null（符号反向恒 miss），修复后全桶 60
+      const nulls = series.filter((p) => p.value_kwh === null);
+      expect(nulls).toHaveLength(0);
+      for (const point of series) {
+        expect(point.value_kwh).toBe(60);
+      }
+      // 同源一致性：Σ 序列值 = baseline_kwh = 48 × 60（窗口总量级，§2.5）
+      const sum = series.reduce((s, p) => s + (p.value_kwh ?? 0), 0);
+      expect(Math.round(sum)).toBe(trend.benchmark.baseline_kwh);
+      expect(trend.benchmark.baseline_kwh).toBe(2880);
+    }
+  });
+
   // ── #3 能力矩阵（403 族） ──
   it('shouldEnforceCapabilityMatrix（用例 3）', async () => {
     const report = await authed('get', '/api/v1/fdd/reports?limit=1', viewerToken);

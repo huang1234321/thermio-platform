@@ -679,12 +679,14 @@ export class KpiService {
     const byStart = new Map<number, number | null>(
       refAggregate.map((b) => [bucketOf(b.bucket).getTime(), b.total_kwh]),
     );
-    const shift = ref.from.getTime() - from.getTime();
+    const shift = ref.from.getTime() - from.getTime(); // 参考窗在实际窗之前 → 负值
     const series: { bucket: string; value_kwh: number | null }[] = [];
     for (let t = bucketOf(from).getTime(); t < to.getTime(); t += spanMs) {
+      // 对齐方向：实际桶 t ↔ 参考桶 t + shift（更早）；DEF-1 修复——原 t − shift
+      // 符号反向，探针键落到参考窗之后恒 miss（序列全 null）
       series.push({
         bucket: new Date(t).toISOString(),
-        value_kwh: byStart.get(t - shift) ?? null,
+        value_kwh: byStart.get(t + shift) ?? null,
       });
     }
     return { benchmark, series };

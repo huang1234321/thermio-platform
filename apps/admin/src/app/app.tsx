@@ -46,6 +46,8 @@ import { FddReportsPage, FddReportDetailPage } from '../pages/fdd/fdd-reports.js
 import { MvOverviewPage } from '../pages/mv/mv-overview.js';
 import { MvBaselineDetailPage } from '../pages/mv/mv-baseline-detail.js';
 import { MvReportDetailPage } from '../pages/mv/mv-report-detail.js';
+import { KpiDashboardPage } from '../pages/kpi/kpi-dashboard.js';
+import { SettingsDigestPage } from '../pages/settings-digest.js';
 
 function RequireAuth(): ReactNode {
   const { state } = useAuth();
@@ -89,6 +91,11 @@ export function App(): ReactNode {
               <Route path="/mv" element={<MvOverviewPage />} />
               <Route path="/mv/baselines/:baselineId" element={<MvBaselineDetailPage />} />
               <Route path="/mv/reports/:reportId" element={<MvReportDetailPage />} />
+            </Route>
+            {/* M11 能耗看板（M11-kpi-dashboard §7.1：/kpi，能力 kpi.read 三角色；
+                对标配置入口按 kpi.config 页内渲染，SEC-AZ-05） */}
+            <Route element={<RequireCapability capability="kpi.read" />}>
+              <Route path="/kpi" element={<KpiDashboardPage />} />
             </Route>
 
             <Route element={<RequireCapability capability="fdd.read" />}>
@@ -152,6 +159,11 @@ export function App(): ReactNode {
             <Route path="/settings/roles" element={<SettingsRolesPage />} />
             <Route element={<RequireCapability capability="users.manage" />}>
               <Route path="/settings/users" element={<SettingsUsersPage />} />
+            </Route>
+            {/* M11 FDD 周报订阅（M11-kpi-dashboard §7.3：/settings/digest，admin 守卫
+                403 = digest.manage 路由能力门） */}
+            <Route element={<RequireCapability capability="digest.manage" />}>
+              <Route path="/settings/digest" element={<SettingsDigestPage />} />
             </Route>
             <Route path="*" element={<NotFoundPage />} />
           </Route>

@@ -111,6 +111,9 @@ describe('reason_code registry snapshot', () => {
         "credential.not_found": {
           "http": 404,
         },
+        "digest.recipient_invalid": {
+          "http": 422,
+        },
         "fdd.finding_not_found": {
           "http": 404,
         },
@@ -148,6 +151,12 @@ describe('reason_code registry snapshot', () => {
           "http": 409,
         },
         "import.unit_conversion_unsupported": {
+          "http": 422,
+        },
+        "kpi.benchmark_config_invalid": {
+          "http": 422,
+        },
+        "kpi.range_invalid": {
           "http": 422,
         },
         "mv.baseline_not_active": {

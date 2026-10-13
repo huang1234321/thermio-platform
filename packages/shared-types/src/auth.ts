@@ -45,6 +45,11 @@ import { ROLES, USER_STATUSES, type Role } from './enums.js';
  * 核证口径属商业结算边界）/ mv_reports.generate（operator+，授权楼宇）/
  * mv_reports.approve（仅 admin，结算锁定）/ mv_reports.export（operator+，
  * viewer 仅在线浏览——出域最小化）。
+ *
+ * IMPL-22 增量（M7-auth.md §4 DAT-245 回写增补定稿键名逐字，M11-kpi-dashboard.md
+ * §5.0，DAT-246）：kpi.read（三角色浏览，授权楼宇内）/ kpi.config（仅 admin——
+ * 对标口径影响对外陈述）/ fdd.export（operator+，viewer 仅在线浏览——出域最小化，
+ * 与 mv_reports.export 同切分）/ digest.manage（仅 admin，出域通道配置）。
  */
 export const CAPABILITIES = [
   'monitor.read',
@@ -61,6 +66,10 @@ export const CAPABILITIES = [
   'mv_reports.generate',
   'mv_reports.approve',
   'mv_reports.export',
+  'kpi.read',
+  'kpi.config',
+  'fdd.export',
+  'digest.manage',
   'assets.read',
   'assets.write',
   'points.semantics.write',
@@ -98,6 +107,7 @@ const VIEWER_CAPABILITIES: readonly Capability[] = [
   'proposals.read',
   'fdd.read',
   'mv.read',
+  'kpi.read',
   'assets.read',
   'imports.read',
   'control.read',
@@ -107,6 +117,8 @@ const VIEWER_CAPABILITIES: readonly Capability[] = [
  * 角色 → 能力推导表（overview §7 权限矩阵；服务端唯一推导点，UI 不得复制此表本地推断）。
  * IMPL-11 增量：operator + points.semantics.write（M7 §4.1）；admin +
  * assets.write / points.status.write / gateways.manage（M7 §4.1 定稿列）。
+ * IMPL-22 增量（M11 §5.0）：三角色 + kpi.read；operator+ + fdd.export；
+ * admin + kpi.config / digest.manage。
  */
 export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = {
   viewer: VIEWER_CAPABILITIES,
@@ -119,6 +131,7 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'fdd.write',
     'mv_reports.generate',
     'mv_reports.export',
+    'fdd.export',
   ],
   admin: [
     ...VIEWER_CAPABILITIES,
@@ -139,6 +152,9 @@ export const ROLE_CAPABILITIES: Readonly<Record<Role, readonly Capability[]>> = 
     'mv_reports.generate',
     'mv_reports.approve',
     'mv_reports.export',
+    'kpi.config',
+    'fdd.export',
+    'digest.manage',
   ],
 };
 

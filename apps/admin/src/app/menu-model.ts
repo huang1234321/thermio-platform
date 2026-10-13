@@ -12,13 +12,15 @@ export interface MenuEntry {
   readonly capability: Capability | null;
 }
 
-/** 顺序固定按 baseline §1.1（监控 → 告警 → 建议 → FDD → 资产 → 导入 → 控制安全 → 系统管理）。 */
+/** 顺序固定按 baseline §1.1（监控 → 告警 → 建议 → FDD → M&V → 能耗看板 → 资产 → 导入 → 控制安全 → 系统管理）。 */
 export const MENU_ENTRIES: readonly MenuEntry[] = [
   { key: 'monitor', label: '监控总览', route: '/monitor', capability: 'monitor.read' },
   { key: 'alarms', label: '告警中心', route: '/alarms', capability: 'alarms.read' },
   { key: 'proposals', label: '控制建议', route: '/proposals', capability: 'proposals.read' },
   { key: 'fdd', label: 'FDD 报告', route: '/fdd', capability: 'fdd.read' },
   { key: 'mv', label: 'M&V 报告', route: '/mv', capability: 'mv.read' },
+  // M11 能耗看板（M11-kpi-dashboard §7.1/R8：prototype v3 起「运营」组位次——FDD 后）
+  { key: 'kpi', label: '能耗看板', route: '/kpi', capability: 'kpi.read' },
   { key: 'assets', label: '资产管理', route: '/assets', capability: 'assets.read' },
   { key: 'imports', label: '点表导入', route: '/imports', capability: 'imports.read' },
   { key: 'control', label: '控制安全', route: '/control/points', capability: 'control.read' },
@@ -29,6 +31,13 @@ export const MENU_ENTRIES: readonly MenuEntry[] = [
     label: '用户管理',
     route: '/settings/users',
     capability: 'users.manage',
+  },
+  // M11 FDD 周报订阅（M11-kpi-dashboard §7.3/R8：设置区，admin 专属）
+  {
+    key: 'settings-digest',
+    label: 'FDD 周报订阅',
+    route: '/settings/digest',
+    capability: 'digest.manage',
   },
 ];
 

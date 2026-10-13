@@ -51,7 +51,10 @@ describe('reason_code registry', () => {
     //   weather_station_invalid / baseline_state_invalid / baseline_overlap /
     //   window_insufficient / fit_unqualified / period_data_insufficient /
     //   report_state_invalid / report_period_locked / export_file_expired）。
-    expect(REASON_CODES).toHaveLength(92);
+    // + IMPL-22 三码（DAT-246，M11-kpi-dashboard.md §4.8：kpi.range_invalid /
+    //   kpi.benchmark_config_invalid / digest.recipient_invalid——export_job 载体
+    //   条件码复用 M9 不新立）。
+    expect(REASON_CODES).toHaveLength(95);
   });
 
   it('shouldKeepTheRegistryComplete_whenReasonCodeSchemaParses', () => {

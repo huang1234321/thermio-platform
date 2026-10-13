@@ -135,6 +135,13 @@ export type ProposalGateReasonCode = (typeof PROPOSAL_GATE_REASON_CODES)[number]
  *   import.building_mismatch 422 同语义、域分离）；
  * - asset.offline_action_ref_conflict（409，§3.10 更名/迁移命中所在网关
  *   offline_action.writes[].raw_name 引用——ADR-003 硬指标 4 安全锚，阻塞不警告）。
+ *
+ * 十批注册（IMPL-22 / DAT-246，M11 能耗看板与 FDD 订阅，modules/M11-kpi-dashboard.md
+ * §4.8 / platform.md §5.2 v1.8 落码值逐字；export_job 载体条件码不新立——复用 M9
+ * mv.* 载体码（同条件同码不按 resource_type 分叉，M11 §4.8 载体行））：
+ * - kpi.range_invalid（422，时间窗/粒度/分组参数非法，details 指明字段与建议区间）；
+ * - kpi.benchmark_config_invalid（422，基准 source 与 params 不匹配）；
+ * - digest.recipient_invalid（422，收件人邮箱格式非法/超 20 人上限，details 序号）。
  */
 export const REASON_CODES = [
   'common.validation_failed',
@@ -197,6 +204,12 @@ export const REASON_CODES = [
   'mv.report_state_invalid',
   'mv.report_period_locked',
   'mv.export_file_expired',
+  // kpi / digest 域（modules/M11-kpi-dashboard.md §4.8；platform.md §5.2 v1.8 增补，
+  // IMPL-22 / DAT-246 注册。载体条件码不新立——export_job 面复用 M9 mv.* 载体码
+  // （同条件同码不按 resource_type 分叉，M11 §4.8 载体行））
+  'kpi.range_invalid',
+  'kpi.benchmark_config_invalid',
+  'digest.recipient_invalid',
   'alarm.rule_not_found',
   'alarm.not_found',
   'alarm.state_invalid',
@@ -573,6 +586,23 @@ export const REASON_CODE_REGISTRY: Readonly<Record<ReasonCode, ReasonCodeMeta>> 
     domain: 'mv',
     http: 409,
     description: '导出件超过保留期（30 天）被清理后下载（M9 §1.7）',
+  },
+  'kpi.range_invalid': {
+    domain: 'kpi',
+    http: 422,
+    description:
+      '看板时间窗/粒度/分组参数非法：from/to 非法、跨度 >731 天、interval 与跨度不匹配、group_by 白名单外（M11 §4.8）',
+  },
+  'kpi.benchmark_config_invalid': {
+    domain: 'kpi',
+    http: 422,
+    description:
+      '对标基准 source 与 params 不匹配（fixed 缺 kwh_per_day、非 fixed 带 params）（M11 §4.8）',
+  },
+  'digest.recipient_invalid': {
+    domain: 'digest',
+    http: 422,
+    description: 'FDD 周报订阅收件人邮箱格式非法 / 超 20 人上限（details 指明序号）（M11 §4.8）',
   },
   'alarm.rule_not_found': {
     domain: 'alarm',

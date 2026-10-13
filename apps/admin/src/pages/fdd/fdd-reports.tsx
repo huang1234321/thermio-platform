@@ -21,6 +21,7 @@ import { formatAbsolute } from '../relative-time.js';
 import { SEVERITY_LABEL } from '../alarm/alarm-shared.js';
 import { fetchFddReportDetail, fetchFddReports } from './fdd-data.js';
 import { HealthRankingTable } from './fdd-overview.js';
+import { FddExportPanel } from './fdd-export-panel.js';
 
 const PERIOD_TYPE_LABEL: Record<(typeof FDD_REPORT_PERIOD_TYPES)[number], string> = {
   day: '日报',
@@ -242,9 +243,13 @@ export function FddReportDetailPage(): ReactNode {
           </Space>
         }
         extra={
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-            生成于 {formatAbsolute(report.generated_at)} · algo {report.algo_version ?? '—'}
-          </Typography.Text>
+          <Space size={12} wrap>
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              生成于 {formatAbsolute(report.generated_at)} · algo {report.algo_version ?? '—'}
+            </Typography.Text>
+            {/* M11 导出扩展（§7.2）：fdd.export 才渲染（viewer 无导出面，SEC-AZ-05） */}
+            <FddExportPanel reportId={report.id} />
+          </Space>
         }
       >
         <Space size={32} wrap>

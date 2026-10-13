@@ -293,7 +293,7 @@ export class MvGenerateService {
           timer.unref();
         }),
       ]);
-      this.metrics.generationDuration.labels(jobId).set((Date.now() - started) / 1000);
+      this.metrics.generationDuration.set((Date.now() - started) / 1000);
     } catch (err) {
       const failure = failureOf(err);
       await db.withTenant(tenantId, async (tx) => {
@@ -415,6 +415,9 @@ export class MvGenerateService {
     });
 
     // (f) 落库事务：删未审批旧行 → 插新行 → job succeeded（upsert 语义，§4.4）
+    // R1 超时竞态门控（DAT-242 验收发现，随 DAT-246 捎带）：事务首步 SELECT status
+    // FOR UPDATE——Promise.race 超时路径已把 job 置 failed 时，迟到的计算结果不再
+    // 落报告行（否则残留「job failed + 报告行」的语义分裂，报告行可见但任务态断言失败）。
     const reportId = randomUUID();
     const reportNo = buildReportNo(
       buildingCodeOf(context.buildingName, context.baseline.building_id),
@@ -422,6 +425,13 @@ export class MvGenerateService {
       reportId,
     );
     await db.withTenant(tenantId, async (tx) => {
+      const gate = await tx.query<{ status: string }>(
+        `SELECT status FROM mv_generation_job WHERE id = $1 FOR UPDATE`,
+        [jobId],
+      );
+      if (gate.rows[0]?.status !== 'running') {
+        throw new JobFailureError('commit', 'mv.generation_timeout_committed');
+      }
       // 未审批旧行换代（§4.4 upsert）：先清引用旧报告的历史任务行（FK RESTRICT）
       await tx.query(
         `DELETE FROM mv_generation_job j

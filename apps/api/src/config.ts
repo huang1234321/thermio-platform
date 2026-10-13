@@ -133,6 +133,20 @@ const AppConfigSchema = z.object({
   // ── M&V 导出件存储（M9-mv-report §1.6/§2.5 R7：mv-exports/ 私桶锚的本地文件形态）──
   // 对象存储（prod 接入）= 替换 MvExportService 的文件读写实现，目录键形状不变。
   MV_EXPORT_DIR: z.string().default('mv-exports'),
+  // ── M11 FDD 导出与订阅（M11-kpi-dashboard §6.1/§6.4，IMPL-22 / DAT-246）──
+  // fdd_report 渲染 = puppeteer-core + 随镜像 Chromium（deploy.md §5 两引擎分列行：
+  // 镜像内置系统 Chromium，npm 不拉浏览器——离线镜像纪律）；空 = 渲染器不可用
+  // → 导出任务 failed 可见可重试（AC-9 失败注入的合法形态）。
+  FDD_PDF_CHROMIUM_PATH: z.string().default(''),
+  // SMTP 客户侧 relay 五项（RUNBOOK §5.1：配置与连通自检；PRD 卡 R6 私有化依赖）。
+  // SMTP_HOST 空 = 投递通道停用 → delivery failed + failure_msg（不影响报告本体）。
+  SMTP_HOST: z.string().default(''),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  SMTP_USER: z.string().default(''),
+  SMTP_PASS: z.string().default(''),
+  SMTP_FROM: z.string().default(''),
+  // 订阅投递周调度扫描节奏（60s 检查「周一 08:00 后未投」；测试可压小加速）。
+  KPI_DIGEST_SWEEP_INTERVAL_MS: z.coerce.number().int().min(1_000).default(60_000),
   // ── 认证会话（SEC-AZ-04：短时效 + 服务端可撤销）──
   AUTH_JWT_SECRET: z.string().min(32).default(''),
   AUTH_ACCESS_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(900),
@@ -273,6 +287,10 @@ export interface AppConfig extends z.infer<typeof AppConfigSchema> {
   };
   /** svc-control MQTT 通道是否启用（CONTROL_MQTT_BROKER_URL 非空）。 */
   readonly controlChannelEnabled: boolean;
+  /** M11 fdd_report 渲染引擎是否可用（FDD_PDF_CHROMIUM_PATH 非空）。 */
+  readonly fddPdfEnabled: boolean;
+  /** M11 SMTP 投递通道是否启用（SMTP_HOST 非空）。 */
+  readonly smtpEnabled: boolean;
 }
 
 /** 解析并校验环境变量；畸形值直接失败快（启动期报错优于运行期漂移）。 */
@@ -328,5 +346,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
       fuseCooldownS: parsed['CONTROL_SAFETY__FUSE_COOLDOWN_S'],
     },
     controlChannelEnabled: parsed.CONTROL_MQTT_BROKER_URL.length > 0,
+    fddPdfEnabled: parsed.FDD_PDF_CHROMIUM_PATH.length > 0,
+    smtpEnabled: parsed.SMTP_HOST.length > 0,
   };
 }

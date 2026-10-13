@@ -193,6 +193,32 @@ export const MV_EXPORT_FORMATS = ['pdf'] as const;
 export const MvExportFormatSchema = z.enum(MV_EXPORT_FORMATS);
 export type MvExportFormat = z.infer<typeof MvExportFormatSchema>;
 
+// M11 能耗看板 / FDD 订阅域（modules/M11-kpi-dashboard.md §4.1；platform.md §6.3 v1.8
+// 增补三组，DAT-245 回写落账——v1.0 提案中的 EXPORT_* 两组已随 M11 v1.1 承载对齐
+// M9 作废，不另立（防双源漂移）；IMPL-22 / DAT-246 落码）
+// ---------------------------------------------------------------------------
+
+/** 对标基准源（M11 §2.5：H6 可配置基准源；mv_baseline 源 M9 交付后接线，不伪算）。 */
+export const KPI_BENCHMARK_SOURCES = [
+  'none',
+  'fixed',
+  'previous_period',
+  'same_period_last_year',
+  'mv_baseline',
+] as const;
+export const KpiBenchmarkSourceSchema = z.enum(KPI_BENCHMARK_SOURCES);
+export type KpiBenchmarkSource = z.infer<typeof KpiBenchmarkSourceSchema>;
+
+/** 桶状态判据（M11 §2.2 封闭集；进行中小时 partial 为标注位非状态）。 */
+export const KPI_BUCKET_STATUSES = ['ok', 'uncertain', 'reset', 'gap'] as const;
+export const KpiBucketStatusSchema = z.enum(KPI_BUCKET_STATUSES);
+export type KpiBucketStatus = z.infer<typeof KpiBucketStatusSchema>;
+
+/** 订阅投递状态（M11 §3.3 fdd_digest_delivery.status CHECK = ddl v1.7 迁移 0007）。 */
+export const FDD_DIGEST_DELIVERY_STATUSES = ['queued', 'sent', 'failed', 'skipped'] as const;
+export const FddDigestDeliveryStatusSchema = z.enum(FDD_DIGEST_DELIVERY_STATUSES);
+export type FddDigestDeliveryStatus = z.infer<typeof FddDigestDeliveryStatusSchema>;
+
 /**
  * 告警规则作用域（DATA-MODEL §3.7 alarm_rule.scope）。
  * IMPL-13 增补 'gateway'（M4-alarm.md §4.1 R3：源头 ddl.md §7 差异 #7 已定

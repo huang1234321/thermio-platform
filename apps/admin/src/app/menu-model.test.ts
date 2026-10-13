@@ -11,11 +11,13 @@ describe('visibleMenuEntries（SEC-AZ-05 显隐）', () => {
   it('shouldShowOnlyGrantedEntries_forViewerCapabilities', () => {
     const visible = visibleMenuEntries(ROLE_CAPABILITIES.viewer);
     const labels = visible.map((entry) => entry.label);
-    // 全部一级菜单（除系统管理）+ 个人设置/角色说明
+    // 全部一级菜单（除系统管理两页）+ 个人设置/角色说明
     expect(labels).toContain('监控总览');
     expect(labels).toContain('控制安全');
+    expect(labels).toContain('能耗看板'); // M11 kpi.read 三角色（DAT-246）
     expect(labels).not.toContain('用户管理');
-    expect(visible).toHaveLength(MENU_ENTRIES.length - 1);
+    expect(labels).not.toContain('FDD 周报订阅'); // M11 digest.manage 仅 admin（出域通道配置）
+    expect(visible).toHaveLength(MENU_ENTRIES.length - 2);
   });
 
   it('shouldShowEverything_forAdminCapabilities', () => {

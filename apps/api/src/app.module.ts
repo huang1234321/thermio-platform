@@ -37,6 +37,7 @@ import { FddModule } from './fdd/fdd.module.js';
 import { InternalAlgoModule } from './internal-algo/internal-algo.module.js';
 import { ImportModule } from './import/import.module.js';
 import { MvModule } from './mv/mv.module.js';
+import { KpiModule } from './kpi/kpi.module.js';
 import { ControlSafetyModule } from './control-safety/control-safety.module.js';
 
 /** 全局过滤器/拦截器（执行序：中间件 → 拦截器 → 管道 → 控制器）。 */
@@ -66,6 +67,7 @@ const GLOBAL_OBSERVABILITY: Provider[] = [
     FddModule,
     ImportModule,
     MvModule,
+    KpiModule,
     ControlSafetyModule,
   ],
   controllers: [HealthController, MetricsController],

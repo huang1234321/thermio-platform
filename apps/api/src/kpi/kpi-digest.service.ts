@@ -12,8 +12,9 @@
  *   失败不影响报告本体（PRD 卡 R6）；
  * - 租户枚举经 AUTH_DB internal_read 旁路（proposal expiry-sweeper 同款），
  *   每租户 withTenant 独立事务（ddl.md §5.2）；
- * - 埋点 fdd_digest_delivered（结构化日志带 report_id/recipients_count 属性；Counter
- *   只取低基数 event label，DAT-242 R2 纪律）。
+ * - 埋点 fdd_digest_delivered / fdd_digest_failed（结构化日志带 report_id/
+ *   recipients_count 属性；Counter 只取低基数 event label，DAT-242 R2 纪律）——
+ *   failed 同入计数（DAT-250 O3：投递失败可观测，不只落日志）。
  */
 import { Inject, Injectable, type OnApplicationShutdown, type OnModuleInit } from '@nestjs/common';
 import type { Logger } from 'pino';
@@ -259,8 +260,8 @@ export class KpiDigestService implements OnModuleInit, OnApplicationShutdown {
   // ═══════════ §6.4 每周一 08:00 调度（BF-11.1） ═══════════
 
   /** 扫描入口（并发重入保护）：周一 08:00 后（本地时区）补投上一完整自然周。 */
-  private async sweep(now: Date): Promise<{ delivered: number; skipped: number }> {
-    if (this.sweeping) return { delivered: 0, skipped: 0 };
+  private async sweep(now: Date): Promise<{ delivered: number; skipped: number; failed: number }> {
+    if (this.sweeping) return { delivered: 0, skipped: 0, failed: 0 };
     this.sweeping = true;
     try {
       return await this.deliverWeeklyTick(now);
@@ -273,18 +274,24 @@ export class KpiDigestService implements OnModuleInit, OnApplicationShutdown {
    * 周投递 tick（exported for e2e 直调注入模拟时钟，§9.5）：
    * 目标期 = 当前所在周的上一完整自然周 [本周一−7d, 本周一)（本地日界）；now 早于
    * 周一 08:00 → 本窗未到投递时刻，no-op；已投（同期行存在）→ no-op（幂等）。
+   * 返回三计数含 failed（DAT-250 O3：失败可见性——sent/skipped/failed 全入统计面）。
    */
-  async deliverWeeklyTick(now: Date): Promise<{ delivered: number; skipped: number }> {
+  async deliverWeeklyTick(now: Date): Promise<{
+    delivered: number;
+    skipped: number;
+    failed: number;
+  }> {
     const db = this.requireDb();
     const pool = this.authPool;
-    if (pool === null) return { delivered: 0, skipped: 0 };
+    if (pool === null) return { delivered: 0, skipped: 0, failed: 0 };
     const { startDate, endDate, due } = weeklyPeriodOf(now);
-    if (!due) return { delivered: 0, skipped: 0 };
+    if (!due) return { delivered: 0, skipped: 0, failed: 0 };
     const tenants = await pool.query<{ id: string }>(
       `SELECT id FROM tenant ORDER BY created_at, id`,
     );
     let delivered = 0;
     let skipped = 0;
+    let failed = 0;
     for (const tenant of tenants.rows) {
       const subs = await db.withTenant(tenant.id, async (tx) => {
         const result = await tx.query<{
@@ -316,6 +323,7 @@ export class KpiDigestService implements OnModuleInit, OnApplicationShutdown {
           const outcome = await this.deliverOne(sub, startDate, endDate);
           if (outcome === 'sent') delivered += 1;
           else if (outcome === 'skipped') skipped += 1;
+          else if (outcome === 'failed') failed += 1;
         } catch (err) {
           this.logger.warn({
             msg: 'kpi_digest_delivery_crashed',
@@ -325,7 +333,7 @@ export class KpiDigestService implements OnModuleInit, OnApplicationShutdown {
         }
       }
     }
-    return { delivered, skipped };
+    return { delivered, skipped, failed };
   }
 
   /** 单订阅投递：无报告 → skipped；有报告 → 渲染 + SMTP → sent/failed；同期幂等。 */
@@ -412,6 +420,7 @@ export class KpiDigestService implements OnModuleInit, OnApplicationShutdown {
       });
       return 'sent';
     }
+    this.metrics.lifecycleEvents.inc({ event: 'fdd_digest_failed' });
     this.logger.warn({
       msg: 'fdd_digest_failed',
       tenant_id: sub.tenant_id,

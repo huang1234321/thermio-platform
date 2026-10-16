@@ -7,6 +7,8 @@
  *   原因 + 重新导出）；
  * - 「导出记录」抽屉：本人任务列表（§5.6 端点族）——任务不依赖会话存活，回来
  *   经抽屉查看；
+ * - 取数时机（DAT-250 O4）：挂载期零请求——挂载即取 latest 属不必要请求；任务态
+ *   仅会话内自建任务可见（202 后刷新），跨会话回看走抽屉（打开时取数）；
  * - 完成通知 = 会话内 toast（不引入消息中心，§7.2 收窄交付）；
  * - 过期判定 = expires_at（载体无独立 expired 态，M9 §1.7）。
  */
@@ -22,7 +24,7 @@ import {
   App as AntdApp,
 } from 'antd';
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { MvExportJob, MvExportJobList } from '@thermio/shared-types';
+import type { MvExportJob } from '@thermio/shared-types';
 import { useCapabilities } from '../../app/auth-context.js';
 import { errorText } from '../asset/asset-shared.js';
 import { formatAbsolute } from '../relative-time.js';
@@ -45,22 +47,8 @@ export function FddExportPanel({ reportId }: { reportId: string }): ReactNode {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadLatest = async (): Promise<void> => {
-      try {
-        const page: MvExportJobList = await fetchFddExportJobs({ resource_id: reportId, limit: 1 });
-        if (!cancelled) setLatest(page.items[0] ?? null);
-      } catch {
-        // 列表加载失败不阻塞浏览（按钮仍可用）
-      }
-    };
-    if (canExport) void loadLatest();
-    return () => {
-      cancelled = true;
-      if (pollTimer.current !== null) clearTimeout(pollTimer.current);
-    };
-  }, [reportId, canExport]);
+  // 挂载期零取数（DAT-250 O4）：latest 只随会话内自建任务刷新（202 后拉一次）；
+  // 跨会话在飞任务回看走「导出记录」抽屉（打开时取数），不在此预取。
 
   // 在飞任务轮询（queued/running → 完成态可见；完成即停，§7.2 任务态徽标）
   useEffect(() => {

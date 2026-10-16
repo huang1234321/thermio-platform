@@ -18,6 +18,7 @@
  * - #11 digest PUT 坏邮箱/21 人 → 422 digest.recipient_invalid（details 序号）；
  * - #12 订阅投递：模拟时钟周一 08:00 → sent；无报告楼 skipped + no_report；
  *   SMTP 不可达注入 → failed（报告本体不受影响）；重跑 tick 不插行；
+ *   failed 入 tick 计数 + fdd_digest_failed 埋点（DAT-250 O3 失败可见性）；
  * - #13 无 energy 点位楼宇 → 200 空集 linked=false；
  * - RLS：B 租户不见 A 租户投递/导出任务（沿 tenant-rls 模式）。
  */
@@ -40,6 +41,7 @@ import type { KpiTsdbStore } from '../src/kpi/kpi-tsdb.repository.js';
 import type { FddPdfRenderer } from '../src/kpi/kpi-fdd-pdf.js';
 import type { DigestMailer } from '../src/kpi/kpi-mailer.js';
 import { KpiDigestService } from '../src/kpi/kpi-digest.service.js';
+import { MetricsService } from '../src/infrastructure/metrics/metrics.service.js';
 
 const skipped = E2E_READY ? describe : describe.skip;
 
@@ -904,6 +906,7 @@ skipped('M11 kpi 域 e2e（§5.9 契约矩阵）', () => {
     const tick1 = await digest.deliverWeeklyTick(simulatedMonday);
     expect(tick1.delivered).toBe(2); // A1 + B1（有报告）
     expect(tick1.skipped).toBe(1); // A2（无报告 → skipped + no_report）
+    expect(tick1.failed).toBe(0); // 正常窗零失败（O3：failed 入计数面）
 
     const a1Deliveries = await authed(
       'get',
@@ -944,6 +947,7 @@ skipped('M11 kpi 域 e2e（§5.9 契约矩阵）', () => {
     const sentBefore = mailerFake.sentCount();
     const tick2 = await digest.deliverWeeklyTick(simulatedMonday);
     expect(tick2.delivered).toBe(0);
+    expect(tick2.failed).toBe(0);
     expect(mailerFake.sentCount()).toBe(sentBefore);
     const a1After = await authed(
       'get',
@@ -975,7 +979,8 @@ skipped('M11 kpi 域 e2e（§5.9 契约矩阵）', () => {
     // A1/A2 也补下一期报告/订阅空缺：A2 依旧无报告（skipped 由 UNIQUE 幂等——同期行已存在则 no-op）
     mailerFake.failMode = true;
     const nextMonday = new Date(Date.UTC(2026, 9, 19, 0, 0, 0));
-    await digest.deliverWeeklyTick(nextMonday);
+    const tick3 = await digest.deliverWeeklyTick(nextMonday);
+    expect(tick3.failed).toBe(1); // B1（SMTP 不可达注入）——O3：failed 入 tick 计数
     const bDeliveries = await authed(
       'get',
       `/api/v1/fdd/digest/deliveries?building_id=${world.buildingB1}`,
@@ -989,6 +994,15 @@ skipped('M11 kpi 域 e2e（§5.9 契约矩阵）', () => {
     const failed = bItems.find((i) => i.period.start === '2026-10-12');
     expect(failed?.status).toBe('failed');
     expect(failed?.failure_msg).toContain('不可达'); // PII 纪律：不含收件地址
+
+    // O3 失败可见性（埋点面）：fdd_digest_failed 进 Counter，不只落日志
+    if (app === null) throw new Error('app 未启动');
+    const metricsText = await app.get(MetricsService).registry.metrics();
+    const failedCounter = metricsText.match(
+      /thermio_kpi_lifecycle_events_total\{event="fdd_digest_failed"\} (\d+)/,
+    );
+    expect(failedCounter).not.toBeNull();
+    expect(Number(failedCounter?.[1] ?? '0')).toBeGreaterThanOrEqual(1);
     mailerFake.failMode = false;
   });
 
